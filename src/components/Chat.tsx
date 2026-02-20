@@ -40,6 +40,7 @@ export function Chat() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isResearchOpen, setIsResearchOpen] = useState(true);
   const eventSourceRef = useRef<EventSource | null>(null);
   const lastEventTimestampRef = useRef<string | null>(null);
 
@@ -185,30 +186,65 @@ export function Chat() {
     ? events.filter((e) => e.taskId === displayTask.id)
     : [];
 
+  const hasResearch = displayTask && taskEvents.length > 0;
+  const isActive = displayTask && ['ACTIVE', 'RESEARCHING', 'WAITING_ANALYST'].includes(displayTask.status);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <header className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+          <h1 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white">
             Agentic News Reader
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
             AI-powered news research assistant
           </p>
         </div>
-        <button
-          onClick={startNewConversation}
-          className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-        >
-          New Chat
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Mobile research toggle */}
+          {hasResearch && (
+            <button
+              onClick={() => setIsResearchOpen(!isResearchOpen)}
+              className="md:hidden flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg"
+            >
+              {isActive && (
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              )}
+              <span>Research</span>
+              <svg
+                className={`w-4 h-4 transition-transform ${isResearchOpen ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={startNewConversation}
+            className="px-3 md:px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            New Chat
+          </button>
+        </div>
       </header>
+
+      {/* Mobile research panel (collapsible, above chat) */}
+      {hasResearch && (
+        <div className={`md:hidden border-b border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300 ${isResearchOpen ? 'max-h-[50vh]' : 'max-h-0'}`}>
+          <ResearchProgress
+            task={displayTask}
+            events={taskEvents}
+          />
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chat area - 1/3 width when research is active, full width otherwise */}
-        <div className={`flex flex-col ${displayTask && taskEvents.length > 0 ? 'w-1/3' : 'flex-1'}`}>
+        {/* Chat area - full width on mobile, 1/3 on desktop when research active */}
+        <div className={`flex flex-col w-full ${hasResearch ? 'md:w-1/3' : 'md:flex-1'}`}>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto">
             <MessageList
@@ -237,9 +273,9 @@ export function Chat() {
           />
         </div>
 
-        {/* Research progress - 2/3 width */}
-        {displayTask && taskEvents.length > 0 && (
-          <div className="w-2/3 border-l border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Desktop research progress - 2/3 width, hidden on mobile */}
+        {hasResearch && (
+          <div className="hidden md:block w-2/3 border-l border-gray-200 dark:border-gray-700 overflow-hidden">
             <ResearchProgress
               task={displayTask}
               events={taskEvents}
