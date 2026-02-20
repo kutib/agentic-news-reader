@@ -3,11 +3,11 @@ import { generateCompletion, parseJsonResponse } from '../services/llm';
 import { emitEvent } from '../services/events';
 import { AnalystDecision, Citation, IntentSlots } from '../types';
 
-const MAX_ITERATIONS = 5;
+const MAX_ITERATIONS = 10;
 
-const ANALYST_SYSTEM_PROMPT = `You are an Analyst Agent for a news research system.
+const ANALYST_SYSTEM_PROMPT = `You are an Analyst Agent for a comprehensive news research system designed to gather information from MANY sources.
 
-Your role is to evaluate if you have enough information to answer a user's research request.
+Your role is to evaluate if you have enough information to answer a user's research request THOROUGHLY.
 You do NOT read articles directly - you evaluate the notes and summaries provided by the Summarizer.
 
 You receive:
@@ -16,24 +16,33 @@ You receive:
 3. Current summary of findings
 4. List of sources used
 
-Your decision framework:
-1. Is the information SUFFICIENT to answer the user's question confidently?
-2. Is the information from RELIABLE sources?
-3. Does the information cover the TIME WINDOW requested?
-4. Can you provide CITATIONS for key claims?
+RESEARCH PHILOSOPHY:
+- This system is designed to read MANY sources (30+ articles per search)
+- Prefer DEPTH over speed - gather comprehensive information
+- Multiple search iterations with different angles produce better results
+- Aim for at least 3-5 search iterations before completing
+- More sources = more reliable, well-rounded answers
 
-If information is INSUFFICIENT, generate a SEARCH query:
+Your decision framework:
+1. Do you have information from MULTIPLE DIVERSE sources (aim for 10+ sources)?
+2. Have you explored DIFFERENT ANGLES on the topic?
+3. Is the information from RELIABLE sources?
+4. Does the information cover the TIME WINDOW requested?
+5. Can you provide MANY CITATIONS for key claims?
+
+If information is INSUFFICIENT or could be MORE COMPREHENSIVE, generate a SEARCH query:
 - Be specific and targeted
 - Include relevant names, dates, locations
 - Vary queries across iterations to find new information
-- Consider different angles on the topic
+- Consider different angles: who, what, when, where, why, reactions, analysis
+- Search for opposing viewpoints and different perspectives
 
-If information is SUFFICIENT, produce the FINAL ANSWER:
-- Directly answer what the user asked
+If information is TRULY COMPREHENSIVE (many sources, multiple angles), produce the FINAL ANSWER:
+- Provide a thorough, detailed answer
 - Include specific dates, names, places
-- Cite sources using [1], [2], etc.
+- Cite MANY sources using [1], [2], [3], etc.
 - Match the requested output type (summary, timeline, etc.)
-- Be factual and avoid speculation
+- Be factual and note areas of disagreement between sources
 
 You MUST respond with a JSON object:
 {
@@ -47,7 +56,9 @@ You MUST respond with a JSON object:
 }
 
 IMPORTANT:
-- After ${MAX_ITERATIONS} unsuccessful search iterations, you MUST return FAIL
+- You have up to ${MAX_ITERATIONS} search iterations - USE THEM for thorough research
+- Only COMPLETE when you have gathered comprehensive information from many sources
+- After ${MAX_ITERATIONS} iterations, you MUST return COMPLETE with what you have (or FAIL if truly insufficient)
 - FAIL response should explain what information is missing`;
 
 interface AnalystInput {
@@ -70,6 +81,27 @@ interface AnalystResponse {
 
 export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> {
   const { taskId, request, slots, notes, summary, sources, iterationCount } = input;
+
+  // Check for failed iterations with NewsAPI error
+  const failedIterations = await prisma.searchIteration.findMany({
+    where: { taskId, status: 'FAILED' },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+  });
+
+  if (failedIterations.length > 0 && failedIterations[0].error?.includes('NewsAPI')) {
+    const failDecision: AnalystDecision = {
+      type: 'FAIL',
+      reason: `Unable to search news: ${failedIterations[0].error}`,
+    };
+
+    await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
+      decision: 'FAIL',
+      reason: failDecision.reason,
+    });
+
+    return failDecision;
+  }
 
   // Emit analyst started event
   await emitEvent(taskId, 'ANALYST', 'ANALYST_STARTED', {

@@ -1,5 +1,5 @@
 import { prisma } from '../prisma';
-import { searchNews } from '../services/newsapi';
+import { searchNews } from '../services/news';
 import { extractArticle } from '../services/article-extractor';
 import { generateCompletion, parseJsonResponse } from '../services/llm';
 import { emitEvent } from '../services/events';
@@ -76,12 +76,12 @@ export async function runSummarizer(iterationId: string): Promise<void> {
       query: iteration.query,
     }, iterationId);
 
-    // Search for articles
+    // Search for articles - fetch many sources for comprehensive research
     const articles = await searchNews({
       query: iteration.query,
       from: slots.timeWindow?.start,
       to: slots.timeWindow?.end,
-      pageSize: 10,
+      pageSize: 30,
     });
 
     // Emit search results event
@@ -121,11 +121,13 @@ export async function runSummarizer(iterationId: string): Promise<void> {
       return;
     }
 
-    // Process each article
+    // Process articles in parallel batches for speed
+    const BATCH_SIZE = 5; // Process 5 articles concurrently
     const allNotes: ArticleNotes[] = [];
     const successfulSources: Array<{ title: string; url: string; source: string }> = [];
 
-    for (const article of articles) {
+    // Helper to process a single article
+    const processArticle = async (article: ArticleMeta): Promise<{ notes: ArticleNotes; source: { title: string; url: string; source: string } } | null> => {
       try {
         // Emit article reading started
         await emitEvent(task.id, 'SUMMARIZER', 'ARTICLE_READING_STARTED', {
@@ -138,23 +140,11 @@ export async function runSummarizer(iterationId: string): Promise<void> {
 
         if (!extracted) {
           console.log(`Skipping article "${article.title}" - could not extract content`);
-          continue;
+          return null;
         }
 
         // Generate notes from the article
         const notes = await generateArticleNotes(article, extracted.content);
-
-        allNotes.push({
-          articleUrl: article.url,
-          articleTitle: article.title,
-          notes,
-        });
-
-        successfulSources.push({
-          title: article.title,
-          url: article.url,
-          source: article.source,
-        });
 
         // Emit article reading done
         await emitEvent(task.id, 'SUMMARIZER', 'ARTICLE_READING_DONE', {
@@ -165,13 +155,41 @@ export async function runSummarizer(iterationId: string): Promise<void> {
         // Emit notes updated
         await emitEvent(task.id, 'SUMMARIZER', 'NOTES_UPDATED', {
           articleTitle: article.title,
-          notes,
+          notes: notes,
         }, iterationId);
+
+        return {
+          notes: {
+            articleUrl: article.url,
+            articleTitle: article.title,
+            notes,
+          },
+          source: {
+            title: article.title,
+            url: article.url,
+            source: article.source,
+          },
+        };
       } catch (error) {
         console.error(`Error processing article "${article.title}":`, error);
-        // Continue with next article
+        return null;
+      }
+    };
+
+    // Process in batches
+    for (let i = 0; i < articles.length; i += BATCH_SIZE) {
+      const batch = articles.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(batch.map(processArticle));
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          allNotes.push(result.value.notes);
+          successfulSources.push(result.value.source);
+        }
       }
     }
+
+    console.log(`[Summarizer] Processed ${successfulSources.length}/${articles.length} articles successfully`);
 
     // Combine notes with existing task notes
     const existingNotes = task.notes || '';

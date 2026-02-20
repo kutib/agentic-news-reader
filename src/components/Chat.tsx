@@ -107,6 +107,18 @@ export function Chat() {
     setIsLoading(true);
     setError(null);
 
+    // Optimistic update: Add user message immediately
+    const tempUserMessageId = `user-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempUserMessageId,
+        role: 'user',
+        text,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
     try {
       const response = await fetch('/api/chat/send', {
         method: 'POST',
@@ -129,17 +141,6 @@ export function Chat() {
         setConversationId(data.conversationId);
       }
 
-      // Add user message
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `user-${Date.now()}`,
-          role: 'user',
-          text,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-
       // Add assistant response
       setMessages((prev) => [
         ...prev,
@@ -158,6 +159,8 @@ export function Chat() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
+      // Remove the optimistic message on error
+      setMessages((prev) => prev.filter((m) => m.id !== tempUserMessageId));
     } finally {
       setIsLoading(false);
     }
@@ -204,27 +207,21 @@ export function Chat() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chat area */}
-        <div className="flex-1 flex flex-col">
+        {/* Chat area - 1/3 width when research is active, full width otherwise */}
+        <div className={`flex flex-col ${displayTask && taskEvents.length > 0 ? 'w-1/3' : 'flex-1'}`}>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto">
             <MessageList
               messages={messages}
               tasks={tasks}
+              onSendMessage={sendMessage}
+              isLoading={isLoading}
             />
           </div>
 
-          {/* Research progress */}
-          {displayTask && taskEvents.length > 0 && (
-            <ResearchProgress
-              task={displayTask}
-              events={taskEvents}
-            />
-          )}
-
           {/* Error display */}
           {error && (
-            <div className="mx-6 mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="mx-4 mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
             </div>
           )}
@@ -234,11 +231,21 @@ export function Chat() {
             onSend={sendMessage}
             isLoading={isLoading}
             placeholder={messages.length === 0
-              ? "Ask about news... e.g., 'Where was Trump yesterday?'"
+              ? "Ask about news..."
               : "Send a message..."
             }
           />
         </div>
+
+        {/* Research progress - 2/3 width */}
+        {displayTask && taskEvents.length > 0 && (
+          <div className="w-2/3 border-l border-gray-200 dark:border-gray-700 overflow-hidden">
+            <ResearchProgress
+              task={displayTask}
+              events={taskEvents}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

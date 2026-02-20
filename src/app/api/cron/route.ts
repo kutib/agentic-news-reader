@@ -41,9 +41,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 2. Process tasks waiting for analyst
+    // 2. Process tasks waiting for analyst (including ACTIVE tasks that may have timed out)
     const waitingTasks = await prisma.task.findMany({
-      where: { status: 'WAITING_ANALYST' },
+      where: {
+        status: { in: ['WAITING_ANALYST', 'ACTIVE'] }
+      },
       orderBy: { updatedAt: 'asc' },
       take: 3,
     });

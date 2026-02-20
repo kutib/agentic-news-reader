@@ -97,6 +97,13 @@ export async function searchNews(params: SearchParams): Promise<ArticleMeta[]> {
 
       if (!response.ok) {
         const errorBody = await response.text();
+        // Handle 401 specifically for free tier limitation
+        if (response.status === 401) {
+          const parsed = JSON.parse(errorBody);
+          if (parsed.code === 'apiKeyInvalid' || parsed.message?.includes('API key')) {
+            throw new Error('NewsAPI free tier only works from localhost. For production deployment, you need a paid NewsAPI plan (starting at $449/month). Visit https://newsapi.org/pricing for more information.');
+          }
+        }
         throw new Error(`NewsAPI error ${response.status}: ${errorBody}`);
       }
 

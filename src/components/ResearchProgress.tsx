@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 
 interface AgentEvent {
   id: string;
@@ -26,8 +26,6 @@ interface ResearchProgressProps {
 }
 
 export function ResearchProgress({ task, events }: ResearchProgressProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-
   // Group events by phase
   const phases = useMemo(() => {
     const result: Array<{
@@ -170,67 +168,46 @@ export function ResearchProgress({ task, events }: ResearchProgressProps) {
     return result;
   }, [events]);
 
-  // Auto-collapse when complete
-  useEffect(() => {
-    if (task.status === 'COMPLETED' || task.status === 'FAILED') {
-      const timer = setTimeout(() => setIsExpanded(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [task.status]);
-
   const isActive = ['ACTIVE', 'RESEARCHING', 'WAITING_ANALYST'].includes(task.status);
 
   return (
-    <div className="mx-6 mb-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
+    <div className="h-full bg-white dark:bg-gray-800 flex flex-col">
       {/* Header */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-      >
-        <div className="flex items-center gap-3">
-          {isActive ? (
-            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          ) : task.status === 'COMPLETED' ? (
-            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          ) : task.status === 'FAILED' ? (
-            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          )}
-          <span className="font-medium text-gray-900 dark:text-white">
-            {isActive ? 'Researching...' : task.status === 'COMPLETED' ? 'Research Complete' : task.status === 'FAILED' ? 'Research Failed' : 'Research'}
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
+        {isActive ? (
+          <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        ) : task.status === 'COMPLETED' ? (
+          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : task.status === 'FAILED' ? (
+          <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )}
+        <div>
+          <span className="font-medium text-gray-900 dark:text-white block">
+            {isActive ? 'Researching...' : task.status === 'COMPLETED' ? 'Complete' : task.status === 'FAILED' ? 'Failed' : 'Research'}
           </span>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            ({task.iterationCount} iteration{task.iterationCount !== 1 ? 's' : ''})
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {task.iterationCount} iteration{task.iterationCount !== 1 ? 's' : ''} · {phases.filter(p => p.type === 'reading').length} articles
           </span>
         </div>
-        <svg
-          className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+      </div>
 
-      {/* Progress phases */}
-      {isExpanded && (
-        <div className="px-4 pb-4 space-y-2">
-          {phases.map((phase) => (
-            <PhaseItem key={phase.id} phase={phase} />
-          ))}
-          {phases.length === 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 italic">Initializing...</p>
-          )}
-        </div>
-      )}
+      {/* Progress phases - scrollable */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+        {phases.map((phase) => (
+          <PhaseItem key={phase.id} phase={phase} />
+        ))}
+        {phases.length === 0 && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 italic">Initializing...</p>
+        )}
+      </div>
     </div>
   );
 }

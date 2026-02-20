@@ -21,9 +21,11 @@ interface Task {
 interface MessageListProps {
   messages: Message[];
   tasks: Task[];
+  onSendMessage?: (text: string) => void;
+  isLoading?: boolean;
 }
 
-export function MessageList({ messages, tasks }: MessageListProps) {
+export function MessageList({ messages, tasks, onSendMessage, isLoading }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,9 +48,9 @@ export function MessageList({ messages, tasks }: MessageListProps) {
           read articles, and synthesize the information into a comprehensive answer.
         </p>
         <div className="grid gap-3 text-left">
-          <ExampleQuery text="Where was Trump yesterday?" />
-          <ExampleQuery text="What's the latest on AI regulations?" />
-          <ExampleQuery text="Summarize tech news from last week" />
+          <ExampleQuery text="Where was Trump yesterday?" onClick={onSendMessage} />
+          <ExampleQuery text="What's the latest on AI regulations?" onClick={onSendMessage} />
+          <ExampleQuery text="Summarize tech news from last week" onClick={onSendMessage} />
         </div>
       </div>
     );
@@ -70,16 +72,20 @@ export function MessageList({ messages, tasks }: MessageListProps) {
           </div>
         );
       })}
+      {isLoading && <ThinkingIndicator />}
       <div ref={bottomRef} />
     </div>
   );
 }
 
-function ExampleQuery({ text }: { text: string }) {
+function ExampleQuery({ text, onClick }: { text: string; onClick?: (text: string) => void }) {
   return (
-    <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+    <button
+      onClick={() => onClick?.(text)}
+      className="w-full text-left px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+    >
       &quot;{text}&quot;
-    </div>
+    </button>
   );
 }
 
@@ -138,6 +144,23 @@ function FinalResponse({ task }: { task: Task }) {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+          <span className="text-sm text-gray-500 dark:text-gray-400">Thinking...</span>
+        </div>
+      </div>
     </div>
   );
 }

@@ -26,7 +26,7 @@ describe('Analyst Agent', () => {
         notes: 'Some notes...',
         summary: 'Some summary...',
         sources: [],
-        iterationCount: 5, // At max iterations
+        iterationCount: 10, // At max iterations
       });
 
       expect(result.type).toBe('FAIL');
