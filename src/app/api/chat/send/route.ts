@@ -6,13 +6,12 @@ import { IntentSlots } from '@/lib/types';
 
 export const maxDuration = 60; // 60 seconds max for Vercel
 
-type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian';
+type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
 
 interface SendRequest {
   conversationId?: string;
   message: string;
   maxSearches?: number;
-  freeTierMode?: boolean;
   provider?: NewsProvider;
 }
 
@@ -94,7 +93,7 @@ export async function POST(request: NextRequest) {
 
       if (task && (task.status === 'ACTIVE' || task.status === 'WAITING_ANALYST')) {
         // Run analyst asynchronously (don't await to return quickly)
-        triggerAnalyst(task.id, body.maxSearches || 1, body.freeTierMode !== false, body.provider || 'gnews').catch((error) => {
+        triggerAnalyst(task.id, body.maxSearches || 1, body.provider || 'gnews').catch((error) => {
           console.error('Error triggering analyst:', error);
         });
       }
@@ -120,7 +119,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function triggerAnalyst(taskId: string, maxSearches: number = 1, freeTierMode: boolean = true, provider: NewsProvider = 'gnews'): Promise<void> {
+async function triggerAnalyst(taskId: string, maxSearches: number = 1, provider: NewsProvider = 'gnews'): Promise<void> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
   });
@@ -130,11 +129,11 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, freeTierM
   const slots = (task.context as IntentSlots) || {};
   const sources = (task.sources as Array<{ title: string; url: string; source: string }>) || [];
 
-  // Store freeTierMode and provider in task context for the summarizer to use
+  // Store provider in task context for the summarizer to use
   await prisma.task.update({
     where: { id: taskId },
     data: {
-      context: { ...slots, freeTierMode, provider },
+      context: { ...slots, provider },
     },
   });
 
@@ -147,7 +146,6 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, freeTierM
     sources,
     iterationCount: task.iterationCount,
     maxSearches,
-    freeTierMode,
   });
 
   await processAnalystDecision(taskId, decision);
@@ -173,7 +171,7 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, freeTierM
         });
 
         if (updatedTask && updatedTask.status === 'WAITING_ANALYST') {
-          await triggerAnalyst(taskId, maxSearches, freeTierMode, provider);
+          await triggerAnalyst(taskId, maxSearches, provider);
         }
       } catch (error) {
         console.error('Error in summarizer:', error);

@@ -84,7 +84,6 @@ interface AnalystInput {
   sources: Array<{ title: string; url: string; source: string }>;
   iterationCount: number;
   maxSearches?: number;
-  freeTierMode?: boolean;
 }
 
 interface AnalystResponse {
@@ -96,7 +95,7 @@ interface AnalystResponse {
 }
 
 export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> {
-  const { taskId, request, slots, notes, summary, sources, iterationCount, maxSearches, freeTierMode = true } = input;
+  const { taskId, request, slots, notes, summary, sources, iterationCount, maxSearches } = input;
 
   // Use maxSearches from input, or fall back to env var, or default to 1
   const maxIterations = maxSearches || MAX_ITERATIONS;
@@ -141,7 +140,7 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
   }
 
   // Build prompt with current state
-  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, forceComplete, freeTierMode);
+  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, forceComplete);
 
   try {
     const response = await generateCompletion({
@@ -292,8 +291,7 @@ function buildAnalystPrompt(
   sources: Array<{ title: string; url: string; source: string }>,
   iterationCount: number,
   maxIterations: number,
-  forceComplete: boolean,
-  freeTierMode: boolean
+  forceComplete: boolean
 ): string {
   let prompt = `## USER REQUEST\n${request}\n\n`;
 
@@ -326,33 +324,6 @@ function buildAnalystPrompt(
     prompt += '\n';
   } else {
     prompt += `## SOURCES USED\nNone yet.\n\n`;
-  }
-
-  if (freeTierMode) {
-    prompt += `\n## CRITICAL: FREE TIER SEARCH LIMITATIONS
-The news API is on a FREE TIER that REJECTS queries containing time-sensitive words.
-Queries with these words return ZERO results. You MUST avoid them.
-
-FORBIDDEN WORDS IN SEARCH QUERIES:
-- Time words: "latest", "recent", "new", "current", "updates", "breaking", "just", "now", "emerging"
-- Date words: "today", "yesterday", "this week", "this month", "2026", "2025", any specific dates
-- Historical: "historical", "past", "old", "previous"
-
-HOW TO WRITE GOOD QUERIES:
-- Focus ONLY on the topic/subject matter
-- Use names, places, events - not time references
-- Think: "What would I search in Wikipedia?" not "What's trending?"
-
-EXAMPLES:
-✓ GOOD: "Trump legal cases indictment"
-✓ GOOD: "Diddy federal investigation charges"
-✓ GOOD: "Tesla stock performance analysis"
-✗ BAD: "Trump legal cases updates" (contains "updates")
-✗ BAD: "latest Diddy news" (contains "latest")
-✗ BAD: "recent Tesla developments" (contains "recent")
-✗ BAD: "new evidence Trump 2026" (contains "new" and "2026")
-
-The user asked about "${request}" - extract the CORE TOPIC and search for that, not the time aspect.\n\n`;
   }
 
   if (forceComplete) {

@@ -2,22 +2,61 @@
 
 import { useState, useRef, useEffect, KeyboardEvent, FormEvent } from 'react';
 
-type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian';
+type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
 
 interface ChatInputProps {
-  onSend: (message: string, maxSearches: number, freeTierMode: boolean, debugMode: boolean, provider: NewsProvider) => void;
+  onSend: (message: string, maxSearches: number, debugMode: boolean, provider: NewsProvider) => void;
   isLoading: boolean;
   placeholder?: string;
+}
+
+// Load settings from localStorage
+function loadSettings() {
+  if (typeof window === 'undefined') {
+    return { maxSearches: 1, debugMode: false, provider: 'gnews' as NewsProvider };
+  }
+  try {
+    const saved = localStorage.getItem('newsReaderSettings');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return { maxSearches: 1, debugMode: false, provider: 'gnews' as NewsProvider };
 }
 
 export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [maxSearches, setMaxSearches] = useState(1);
-  const [freeTierMode, setFreeTierMode] = useState(true); // Default to free tier
-  const [debugMode, setDebugMode] = useState(false); // Debug mode off by default
+  const [debugMode, setDebugMode] = useState(false);
   const [provider, setProvider] = useState<NewsProvider>('gnews');
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load settings from localStorage on mount
+  useEffect(() => {
+    const settings = loadSettings();
+    setMaxSearches(settings.maxSearches || 1);
+    setDebugMode(settings.debugMode || false);
+    setProvider(settings.provider || 'gnews');
+    setSettingsLoaded(true);
+  }, []);
+
+  // Save settings to localStorage when they change
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    try {
+      localStorage.setItem('newsReaderSettings', JSON.stringify({
+        maxSearches,
+        debugMode,
+        provider,
+      }));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [maxSearches, debugMode, provider, settingsLoaded]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -31,7 +70,7 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (message.trim() && !isLoading) {
-      onSend(message.trim(), maxSearches, freeTierMode, debugMode, provider);
+      onSend(message.trim(), maxSearches, debugMode, provider);
       setMessage('');
     }
   };
@@ -97,17 +136,21 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
                 onChange={(e) => setProvider(e.target.value as NewsProvider)}
                 className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm text-gray-900 dark:text-white"
               >
+                <option value="newsdata">NewsData.io (recommended)</option>
                 <option value="gnews">GNews</option>
-                <option value="newsapi">NewsAPI (localhost only)</option>
-                <option value="newsdata">NewsData.io</option>
+                <option value="currents">Currents API</option>
+                <option value="mediastack">Mediastack</option>
                 <option value="guardian">The Guardian</option>
+                <option value="newsapi">NewsAPI (localhost only)</option>
               </select>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {provider === 'gnews' && 'Free tier: 12h delay, 30-day history'}
-              {provider === 'newsapi' && 'Free tier only works on localhost'}
-              {provider === 'newsdata' && 'Free tier: 200 requests/day, no restrictions'}
-              {provider === 'guardian' && 'Free: 500 requests/day, UK-focused'}
+              {provider === 'newsdata' && '200 req/day, no restrictions'}
+              {provider === 'gnews' && '100 req/day, 12h delay, 30-day history'}
+              {provider === 'currents' && '600 req/day, good coverage'}
+              {provider === 'mediastack' && '500 req/month, historical data'}
+              {provider === 'guardian' && '500 req/day, UK-focused'}
+              {provider === 'newsapi' && 'Localhost only (free tier blocked in production)'}
             </p>
 
             <div className="border-t border-gray-200 dark:border-gray-600 pt-3 flex items-center justify-between">
@@ -128,23 +171,6 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
             <p className="text-xs text-gray-500 dark:text-gray-400">
               More searches = more sources but uses more API quota
             </p>
-
-            <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={freeTierMode}
-                  onChange={(e) => setFreeTierMode(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  GNews Free Tier Mode
-                </span>
-              </label>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Free tier has 12-hour delay. Avoids searching for &quot;latest&quot; or date-specific news.
-              </p>
-            </div>
 
             <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
               <label className="flex items-center gap-2 cursor-pointer">

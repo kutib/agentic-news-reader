@@ -3,7 +3,7 @@ import { searchNews as searchNewsAPI } from './newsapi';
 import { searchGNews } from './gnews';
 import { searchNewsData } from './newsdata';
 
-export type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian';
+export type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
 
 interface SearchParams {
   query: string;
@@ -11,7 +11,6 @@ interface SearchParams {
   to?: string;
   pageSize?: number;
   sortBy?: 'publishedAt' | 'relevancy' | 'popularity';
-  freeTierMode?: boolean;
   provider?: NewsProvider;
 }
 
@@ -64,7 +63,17 @@ export async function searchNews(params: SearchParams): Promise<NewsSearchResult
 
     case 'guardian': {
       // TODO: Implement The Guardian API
-      throw new Error('The Guardian API is not yet implemented. Please use GNews or NewsAPI.');
+      throw new Error('The Guardian API is not yet implemented.');
+    }
+
+    case 'currents': {
+      // TODO: Implement Currents API
+      throw new Error('Currents API is not yet implemented.');
+    }
+
+    case 'mediastack': {
+      // TODO: Implement Mediastack API
+      throw new Error('Mediastack API is not yet implemented.');
     }
 
     case 'gnews':

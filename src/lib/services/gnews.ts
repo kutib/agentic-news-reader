@@ -28,7 +28,6 @@ interface SearchParams {
   to?: string;
   pageSize?: number;
   sortBy?: 'publishedAt' | 'relevancy' | 'popularity';
-  freeTierMode?: boolean;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -59,12 +58,10 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
   }
 
   // GNews date format: YYYY-MM-DDTHH:MM:SSZ
-  // For free tier: do NOT use date filters - GNews will return available articles
-  // (Free tier automatically excludes real-time data and limits to 30 days)
+  // Note: Not using date filters - GNews manages availability based on plan
   let dateRange: { from: string; to: string } | undefined;
 
-  if (params.freeTierMode === false && (params.from || params.to)) {
-    // Only use date filters if NOT in free tier mode
+  if (params.from || params.to) {
     if (params.from) {
       url.searchParams.set('from', params.from);
     }
@@ -72,8 +69,6 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
       url.searchParams.set('to', params.to);
     }
     dateRange = { from: params.from || 'any', to: params.to || 'any' };
-  } else if (params.freeTierMode !== false) {
-    console.log('[GNews] Free tier mode: no date filters (GNews manages availability)');
   }
 
   // Add API key last
