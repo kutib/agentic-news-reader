@@ -352,18 +352,20 @@ function PhaseItem({ phase }: { phase: Phase }) {
               icon
             )}
           </div>
-          {phase.requestUrl ? (
+          <span className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1">{phase.title}</span>
+          {phase.requestUrl && (
             <a
               href={phase.requestUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1 hover:text-purple-600 dark:hover:text-purple-400 hover:underline"
-              title="View search results"
+              className="text-xs text-purple-500 hover:text-purple-600 hover:underline flex-shrink-0 flex items-center gap-1"
+              title="View GNews API request"
             >
-              {phase.title}
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              API
             </a>
-          ) : (
-            <span className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1">{phase.title}</span>
           )}
           <span className="text-xs text-gray-400">{phase.articles.length} found</span>
         </div>
