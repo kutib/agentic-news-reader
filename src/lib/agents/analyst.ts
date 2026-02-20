@@ -152,6 +152,41 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
 
     const parsed = await parseJsonResponse<AnalystResponse>(response);
 
+    // If forceComplete is true and LLM returned SEARCH, override to COMPLETE
+    if (forceComplete && parsed.decision === 'SEARCH') {
+      console.log('[Analyst] Force completing due to search limit');
+
+      // Generate a completion response based on available info
+      const forceResponse = summary
+        ? `Based on the available research:\n\n${summary}\n\n*Note: Research was limited to ${maxIterations} search${maxIterations > 1 ? 'es' : ''} as configured.*`
+        : `Unable to find sufficient information within the search limit (${maxIterations}). Please try increasing the max searches in settings or refining your query.`;
+
+      const forcedCitations: Citation[] = sources.slice(0, 10).map((s, idx) => ({
+        number: idx + 1,
+        title: s.title,
+        url: s.url,
+        source: s.source,
+      }));
+
+      const completeDecision: AnalystDecision = {
+        type: 'COMPLETE',
+        response: forceResponse,
+        citations: forcedCitations,
+      };
+
+      await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
+        decision: 'COMPLETE',
+        reason: 'Search limit reached - completing with available information',
+      });
+
+      await emitEvent(taskId, 'ANALYST', 'RESPONSE_FINALIZED', {
+        response: forceResponse,
+        citations: forcedCitations,
+      });
+
+      return completeDecision;
+    }
+
     // Handle decisions
     switch (parsed.decision) {
       case 'SEARCH': {

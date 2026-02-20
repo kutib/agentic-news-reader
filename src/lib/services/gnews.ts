@@ -102,6 +102,17 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
 
       const data: GNewsResponse = await response.json();
 
+      console.log(`[GNews] Query: "${params.query}" returned ${data.totalArticles} total, ${data.articles?.length || 0} articles`);
+
+      // Handle case where articles might be undefined or null
+      if (!data.articles || data.articles.length === 0) {
+        console.log('[GNews] No articles returned');
+        return {
+          articles: [],
+          requestUrl: displayUrl.toString(),
+        };
+      }
+
       // Normalize response to ArticleMeta
       const articles = data.articles.map((article) => ({
         title: article.title || 'Untitled',
