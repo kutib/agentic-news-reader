@@ -67,7 +67,7 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
     const fromDate = new Date(now);
     fromDate.setDate(fromDate.getDate() - 20); // 20 days ago
     const toDate = new Date(now);
-    toDate.setDate(toDate.getDate() - 1); // 1 day ago
+    toDate.setDate(toDate.getDate() - 3); // 3 days ago (safe buffer for free tier)
 
     const fromStr = fromDate.toISOString().split('T')[0] + 'T00:00:00Z';
     const toStr = toDate.toISOString().split('T')[0] + 'T23:59:59Z';
