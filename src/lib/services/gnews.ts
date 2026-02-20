@@ -34,6 +34,38 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Sanitize a query string for GNews API.
+ * GNews has specific syntax rules - this removes problematic characters.
+ * See: https://docs.gnews.io/endpoints/search-endpoint#query-syntax
+ */
+function sanitizeQuery(query: string): string {
+  let sanitized = query;
+
+  // Remove unbalanced quotes
+  const doubleQuotes = (sanitized.match(/"/g) || []).length;
+  if (doubleQuotes % 2 !== 0) {
+    sanitized = sanitized.replace(/"/g, '');
+  }
+
+  // Remove problematic special characters that aren't part of GNews syntax
+  // GNews supports: AND, OR, NOT, quotes for exact match, - for exclusion
+  sanitized = sanitized
+    .replace(/[[\]{}()]/g, '') // Remove brackets and parentheses
+    .replace(/[<>]/g, '')      // Remove angle brackets
+    .replace(/[:;]/g, ' ')     // Replace colons/semicolons with space
+    .replace(/[&|^~]/g, ' ')   // Replace boolean-like operators with space
+    .replace(/\s+/g, ' ')      // Collapse multiple spaces
+    .trim();
+
+  // If query is empty after sanitization, return a simple fallback
+  if (!sanitized) {
+    return 'news';
+  }
+
+  return sanitized;
+}
+
 export interface GNewsResult {
   articles: ArticleMeta[];
   requestUrl: string; // URL for debugging
@@ -47,7 +79,12 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
   }
 
   const url = new URL(GNEWS_API_BASE_URL);
-  url.searchParams.set('q', params.query);
+  const sanitizedQuery = sanitizeQuery(params.query);
+  url.searchParams.set('q', sanitizedQuery);
+
+  if (sanitizedQuery !== params.query) {
+    console.log(`[GNews] Query sanitized: "${params.query}" -> "${sanitizedQuery}"`);
+  }
   url.searchParams.set('lang', 'en');
   url.searchParams.set('country', 'us');
   url.searchParams.set('max', String(params.pageSize || 10));

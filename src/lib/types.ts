@@ -29,6 +29,7 @@ export type EventType =
   | 'SUMMARY_UPDATED'
   | 'SEARCH_LIMIT_REACHED'
   | 'RESPONSE_FINALIZED'
+  | 'QUERY_ERROR_RETRY'
   | 'ERROR';
 
 // Message role

@@ -100,25 +100,112 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
   // Use maxSearches from input, or fall back to env var, or default to 1
   const maxIterations = maxSearches || MAX_ITERATIONS;
 
-  // Check for failed iterations with NewsAPI error
+  // Check for failed iterations with API errors
   const failedIterations = await prisma.searchIteration.findMany({
     where: { taskId, status: 'FAILED' },
     orderBy: { createdAt: 'desc' },
-    take: 1,
+    take: 3, // Get last 3 to detect repeated failures
   });
 
-  if (failedIterations.length > 0 && failedIterations[0].error?.includes('NewsAPI')) {
-    const failDecision: AnalystDecision = {
-      type: 'FAIL',
-      reason: `Unable to search news: ${failedIterations[0].error}`,
-    };
+  if (failedIterations.length > 0) {
+    const failedIteration = failedIterations[0];
+    const errorMsg = failedIteration.error || '';
 
-    await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
-      decision: 'FAIL',
-      reason: failDecision.reason,
+    // For API restriction errors (NewsAPI localhost-only, etc.), fail immediately
+    if (errorMsg.includes('NewsAPI') || errorMsg.includes('localhost only')) {
+      const failDecision: AnalystDecision = {
+        type: 'FAIL',
+        reason: `Unable to search news: ${errorMsg}`,
+      };
+
+      await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
+        decision: 'FAIL',
+        reason: failDecision.reason,
+      });
+
+      return failDecision;
+    }
+
+    // For other errors (query syntax, rate limits, etc.), let the LLM fix the query
+    // But limit retries to avoid infinite loops
+    const recentFailures = failedIterations.filter(
+      (f: { createdAt: Date }) => f.createdAt > new Date(Date.now() - 60000) // Last minute
+    );
+
+    if (recentFailures.length >= 3) {
+      // Too many failures in a short time - fail the task
+      const failDecision: AnalystDecision = {
+        type: 'FAIL',
+        reason: `Multiple query failures: ${errorMsg}. Please try a different search or check your API configuration.`,
+      };
+
+      await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
+        decision: 'FAIL',
+        reason: failDecision.reason,
+      });
+
+      return failDecision;
+    }
+
+    // Pass the error to the LLM so it can generate a better query
+    console.log(`[Analyst] Previous query failed: "${failedIteration.query}" - Error: ${errorMsg}`);
+
+    await emitEvent(taskId, 'ANALYST', 'QUERY_ERROR_RETRY', {
+      failedQuery: failedIteration.query,
+      error: errorMsg,
     });
 
-    return failDecision;
+    // Add the error context to help the LLM fix the query
+    const errorContext = `\n\n## PREVIOUS QUERY FAILED\nQuery: "${failedIteration.query}"\nError: ${errorMsg}\n\nPlease generate a DIFFERENT, SIMPLER query that avoids the issue. Remove special characters, quotes, and complex syntax.`;
+
+    // Build prompt with error context
+    const userPromptWithError = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, false) + errorContext;
+
+    try {
+      const response = await generateCompletion({
+        systemPrompt: ANALYST_SYSTEM_PROMPT,
+        userPrompt: userPromptWithError,
+        jsonMode: true,
+        temperature: 0.3, // Slightly higher for more variation
+      });
+
+      const parsed = await parseJsonResponse<AnalystResponse>(response);
+
+      if (parsed.decision === 'SEARCH' && parsed.query) {
+        // Make sure the new query is different from the failed one
+        if (parsed.query.toLowerCase() === failedIteration.query.toLowerCase()) {
+          // LLM gave same query - generate a simplified one
+          const simplifiedQuery = buildSimplifiedQuery(request, slots);
+
+          await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
+            decision: 'SEARCH',
+            reason: 'Auto-simplified query after repeated failure',
+            query: simplifiedQuery,
+          });
+
+          return {
+            type: 'SEARCH',
+            query: simplifiedQuery,
+            reason: 'Auto-simplified query after repeated failure',
+          };
+        }
+
+        await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
+          decision: 'SEARCH',
+          reason: parsed.reason || 'Retrying with fixed query',
+          query: parsed.query,
+        });
+
+        return {
+          type: 'SEARCH',
+          query: parsed.query,
+          reason: parsed.reason || 'Retrying with fixed query',
+        };
+      }
+    } catch (llmError) {
+      console.error('[Analyst] Failed to generate fixed query:', llmError);
+      // Fall through to normal analyst flow
+    }
   }
 
   // Emit analyst started event
@@ -358,6 +445,42 @@ function buildFallbackQuery(request: string, slots: IntentSlots): string {
   }
 
   return parts.join(' ') || request.substring(0, 50);
+}
+
+/**
+ * Build a simplified query when the previous query had syntax errors.
+ * Extracts only simple keywords without special characters.
+ */
+function buildSimplifiedQuery(request: string, slots: IntentSlots): string {
+  // Start with the topic if available
+  if (slots.topic) {
+    // Clean the topic - remove any special chars, keep only words
+    const cleanTopic = slots.topic
+      .replace(/[^a-zA-Z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleanTopic.length > 2) {
+      return cleanTopic;
+    }
+  }
+
+  // Extract simple keywords from the request
+  const words = request
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 3);
+
+  const skipWords = new Set([
+    'what', 'where', 'when', 'who', 'why', 'how', 'is', 'was', 'were', 'are',
+    'the', 'a', 'an', 'about', 'tell', 'me', 'give', 'find', 'search', 'look',
+    'news', 'article', 'articles', 'recent', 'latest', 'current', 'today',
+  ]);
+
+  const keywords = words
+    .filter((w) => !skipWords.has(w.toLowerCase()))
+    .slice(0, 3);
+
+  return keywords.join(' ') || 'latest news';
 }
 
 export async function processAnalystDecision(
