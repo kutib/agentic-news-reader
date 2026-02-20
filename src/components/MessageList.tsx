@@ -48,12 +48,12 @@ export function MessageList({ messages, tasks, onSendMessage, isLoading }: Messa
           read articles, and synthesize the information into a comprehensive answer.
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-500 max-w-md mb-4">
-          Note: Using GNews free tier (12-hour delay). Best for general topics, not breaking news.
+          Note: Using GNews free tier (12-hour delay, 30-day history). Best for recent ongoing stories.
         </p>
         <div className="grid gap-3 text-left">
-          <ExampleQuery text="Which politicians received donations from FTX before its collapse?" onClick={onSendMessage} />
-          <ExampleQuery text="Which celebrities were seen at Diddy's parties now under investigation?" onClick={onSendMessage} />
-          <ExampleQuery text="Who sold their stocks right before major tech layoffs were announced?" onClick={onSendMessage} />
+          <ExampleQuery text="Who has been newly named or charged in the Diddy investigation?" onClick={onSendMessage} />
+          <ExampleQuery text="Which tech executives sold stock before recent layoff announcements?" onClick={onSendMessage} />
+          <ExampleQuery text="What new evidence has emerged in Trump's ongoing legal cases?" onClick={onSendMessage} />
         </div>
       </div>
     );
