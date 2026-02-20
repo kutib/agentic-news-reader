@@ -140,11 +140,14 @@ export function ResearchProgress({ task, events, debugMode = false }: ResearchPr
 
         case 'NOTES_UPDATED': {
           const payload = event.payload as { articleTitle?: string; notes?: Record<string, string[]> };
-          const lastReading = [...result].reverse().find((p) => p.type === 'reading');
-          if (lastReading && payload.notes) {
+          // Find the reading phase that matches this article by title
+          const matchingReading = [...result].reverse().find(
+            (p) => p.type === 'reading' && p.title === payload.articleTitle
+          );
+          if (matchingReading && payload.notes) {
             const noteCount = Object.values(payload.notes).flat().length;
-            lastReading.details.push(`Extracted ${noteCount} notes`);
-            lastReading.notes = payload.notes;
+            matchingReading.details.push(`Extracted ${noteCount} notes`);
+            matchingReading.notes = payload.notes;
           }
           break;
         }
