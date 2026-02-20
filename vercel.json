@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm ci",
+  "installCommand": "yarn install --frozen-lockfile",
   "functions": {
     "src/app/api/chat/send/route.ts": {
       "maxDuration": 60
