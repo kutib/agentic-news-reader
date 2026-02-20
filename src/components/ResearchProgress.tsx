@@ -171,6 +171,18 @@ export function ResearchProgress({ task, events }: ResearchProgressProps) {
           });
           break;
 
+        case 'SEARCH_LIMIT_REACHED': {
+          const payload = event.payload as { maxSearches?: number };
+          result.push({
+            id: event.id,
+            type: 'analysis',
+            title: `Search limit reached (${payload.maxSearches || 1})`,
+            details: ['Completing with available information', 'Tip: Adjust max searches in settings ⚙️'],
+            status: 'done',
+          });
+          break;
+        }
+
         case 'ERROR': {
           const payload = event.payload as { error?: string; details?: string };
           result.push({

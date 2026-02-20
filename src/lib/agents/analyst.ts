@@ -132,6 +132,13 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
   // Check if we've reached max iterations - force completion with available info
   const forceComplete = iterationCount >= maxIterations;
 
+  if (forceComplete) {
+    await emitEvent(taskId, 'ANALYST', 'SEARCH_LIMIT_REACHED', {
+      maxSearches: maxIterations,
+      iterationCount,
+    });
+  }
+
   // Build prompt with current state
   const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, forceComplete);
 

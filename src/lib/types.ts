@@ -27,6 +27,7 @@ export type EventType =
   | 'ARTICLE_READING_DONE'
   | 'NOTES_UPDATED'
   | 'SUMMARY_UPDATED'
+  | 'SEARCH_LIMIT_REACHED'
   | 'RESPONSE_FINALIZED'
   | 'ERROR';
 
