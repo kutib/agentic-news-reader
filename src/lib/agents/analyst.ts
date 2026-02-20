@@ -3,7 +3,8 @@ import { generateCompletion, parseJsonResponse } from '../services/llm';
 import { emitEvent } from '../services/events';
 import { AnalystDecision, Citation, IntentSlots } from '../types';
 
-const MAX_ITERATIONS = 10;
+// Max search iterations per request - configurable via environment variable
+const MAX_ITERATIONS = parseInt(process.env.MAX_SEARCHES || '1', 10);
 
 const ANALYST_SYSTEM_PROMPT = `You are an Analyst Agent for a comprehensive news research system designed to gather information from MANY sources.
 
@@ -82,6 +83,7 @@ interface AnalystInput {
   summary: string | null;
   sources: Array<{ title: string; url: string; source: string }>;
   iterationCount: number;
+  maxSearches?: number;
 }
 
 interface AnalystResponse {
@@ -93,7 +95,10 @@ interface AnalystResponse {
 }
 
 export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> {
-  const { taskId, request, slots, notes, summary, sources, iterationCount } = input;
+  const { taskId, request, slots, notes, summary, sources, iterationCount, maxSearches } = input;
+
+  // Use maxSearches from input, or fall back to env var, or default to 1
+  const maxIterations = maxSearches || MAX_ITERATIONS;
 
   // Check for failed iterations with NewsAPI error
   const failedIterations = await prisma.searchIteration.findMany({
@@ -125,10 +130,10 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
   });
 
   // Check if we've exceeded max iterations
-  if (iterationCount >= MAX_ITERATIONS) {
+  if (iterationCount >= maxIterations) {
     const failDecision: AnalystDecision = {
       type: 'FAIL',
-      reason: `Research limit reached after ${MAX_ITERATIONS} search iterations. Could not gather sufficient information to answer the question confidently.`,
+      reason: `Research limit reached after ${maxIterations} search iterations. Could not gather sufficient information to answer the question confidently.`,
     };
 
     await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
@@ -140,7 +145,7 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
   }
 
   // Build prompt with current state
-  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount);
+  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations);
 
   try {
     const response = await generateCompletion({
@@ -254,7 +259,8 @@ function buildAnalystPrompt(
   notes: string | null,
   summary: string | null,
   sources: Array<{ title: string; url: string; source: string }>,
-  iterationCount: number
+  iterationCount: number,
+  maxIterations: number
 ): string {
   let prompt = `## USER REQUEST\n${request}\n\n`;
 
@@ -267,7 +273,7 @@ function buildAnalystPrompt(
   }
   prompt += `- Output Type: ${slots.outputType || 'summary'}\n\n`;
 
-  prompt += `## CURRENT ITERATION: ${iterationCount + 1} of ${MAX_ITERATIONS}\n\n`;
+  prompt += `## CURRENT ITERATION: ${iterationCount + 1} of ${maxIterations}\n\n`;
 
   if (notes) {
     prompt += `## NOTES FROM ARTICLES\n${notes}\n\n`;

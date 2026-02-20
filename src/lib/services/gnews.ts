@@ -34,7 +34,12 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function searchGNews(params: SearchParams): Promise<ArticleMeta[]> {
+export interface GNewsResult {
+  articles: ArticleMeta[];
+  requestUrl: string; // URL without API key for debugging
+}
+
+export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
   const apiKey = process.env.GNEWS_API_KEY;
   if (!apiKey) {
     throw new Error('GNEWS_API_KEY is not configured');
@@ -45,6 +50,10 @@ export async function searchGNews(params: SearchParams): Promise<ArticleMeta[]> 
   url.searchParams.set('lang', 'en');
   url.searchParams.set('max', String(params.pageSize || 10));
   url.searchParams.set('apikey', apiKey);
+
+  // Create a display URL without the API key
+  const displayUrl = new URL(url.toString());
+  displayUrl.searchParams.set('apikey', 'YOUR_API_KEY');
 
   // GNews uses sortby (lowercase)
   if (params.sortBy) {
@@ -93,13 +102,18 @@ export async function searchGNews(params: SearchParams): Promise<ArticleMeta[]> 
       const data: GNewsResponse = await response.json();
 
       // Normalize response to ArticleMeta
-      return data.articles.map((article) => ({
+      const articles = data.articles.map((article) => ({
         title: article.title || 'Untitled',
         url: article.url,
         source: article.source.name || 'Unknown',
         publishedAt: article.publishedAt,
         description: article.description,
       }));
+
+      return {
+        articles,
+        requestUrl: displayUrl.toString(),
+      };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`GNews request failed (attempt ${attempt + 1}):`, lastError.message);

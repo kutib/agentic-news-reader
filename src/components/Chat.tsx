@@ -104,7 +104,7 @@ export function Chat() {
     }
   };
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, maxSearches: number = 1) => {
     setIsLoading(true);
     setError(null);
 
@@ -127,6 +127,7 @@ export function Chat() {
         body: JSON.stringify({
           conversationId,
           message: text,
+          maxSearches,
         }),
       });
 

@@ -34,6 +34,7 @@ interface Phase {
   url?: string;
   source?: string;
   articles?: Array<{ title: string; url: string; source: string }>;
+  requestUrl?: string; // GNews API request URL for debugging
 }
 
 export function ResearchProgress({ task, events }: ResearchProgressProps) {
@@ -99,10 +100,11 @@ export function ResearchProgress({ task, events }: ResearchProgressProps) {
           break;
 
         case 'SEARCH_RESULTS': {
-          const payload = event.payload as { count?: number; articles?: Array<{ title: string; url: string; source: string }> };
+          const payload = event.payload as { count?: number; requestUrl?: string; articles?: Array<{ title: string; url: string; source: string }> };
           if (currentSearch) {
             currentSearch.details = [`Found ${payload.count || 0} articles`];
             currentSearch.articles = payload.articles || [];
+            currentSearch.requestUrl = payload.requestUrl;
             currentSearch.status = 'done';
           }
           break;
@@ -309,6 +311,17 @@ function PhaseItem({ phase }: { phase: Phase }) {
             )}
           </div>
           <span className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1">{phase.title}</span>
+          {phase.requestUrl && (
+            <a
+              href={phase.requestUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-purple-500 hover:text-purple-600 hover:underline flex-shrink-0"
+              title="View API request"
+            >
+              API
+            </a>
+          )}
           <span className="text-xs text-gray-400">{phase.articles.length} found</span>
         </div>
         <div className="px-3 py-2 space-y-0.5 max-h-32 overflow-y-auto bg-gray-50 dark:bg-gray-900/30">

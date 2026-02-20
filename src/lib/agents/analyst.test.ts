@@ -18,7 +18,7 @@ describe('Analyst Agent', () => {
   describe('Decision Logic', () => {
     it('should fail after MAX_ITERATIONS', async () => {
       const { runAnalyst } = await import('./analyst');
-
+      // MAX_ITERATIONS defaults to 1 (configurable via MAX_SEARCHES env var)
       const result = await runAnalyst({
         taskId: 'task-123',
         request: 'Where was Trump yesterday?',
@@ -26,7 +26,7 @@ describe('Analyst Agent', () => {
         notes: 'Some notes...',
         summary: 'Some summary...',
         sources: [],
-        iterationCount: 10, // At max iterations
+        iterationCount: 1, // At max iterations (default is 1)
       });
 
       expect(result.type).toBe('FAIL');

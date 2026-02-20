@@ -9,6 +9,7 @@ export const maxDuration = 60; // 60 seconds max for Vercel
 interface SendRequest {
   conversationId?: string;
   message: string;
+  maxSearches?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
 
       if (task && (task.status === 'ACTIVE' || task.status === 'WAITING_ANALYST')) {
         // Run analyst asynchronously (don't await to return quickly)
-        triggerAnalyst(task.id).catch((error) => {
+        triggerAnalyst(task.id, body.maxSearches || 1).catch((error) => {
           console.error('Error triggering analyst:', error);
         });
       }
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function triggerAnalyst(taskId: string): Promise<void> {
+async function triggerAnalyst(taskId: string, maxSearches: number = 1): Promise<void> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
   });
@@ -133,6 +134,7 @@ async function triggerAnalyst(taskId: string): Promise<void> {
     summary: task.summary,
     sources,
     iterationCount: task.iterationCount,
+    maxSearches,
   });
 
   await processAnalystDecision(taskId, decision);
@@ -158,7 +160,7 @@ async function triggerAnalyst(taskId: string): Promise<void> {
         });
 
         if (updatedTask && updatedTask.status === 'WAITING_ANALYST') {
-          await triggerAnalyst(taskId);
+          await triggerAnalyst(taskId, maxSearches);
         }
       } catch (error) {
         console.error('Error in summarizer:', error);

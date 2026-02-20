@@ -77,16 +77,18 @@ export async function runSummarizer(iterationId: string): Promise<void> {
     }, iterationId);
 
     // Search for articles - fetch many sources for comprehensive research
-    const articles = await searchNews({
+    const searchResult = await searchNews({
       query: iteration.query,
       from: slots.timeWindow?.start,
       to: slots.timeWindow?.end,
       pageSize: 30,
     });
+    const articles = searchResult.articles;
 
-    // Emit search results event
+    // Emit search results event with request URL for debugging
     await emitEvent(task.id, 'SUMMARIZER', 'SEARCH_RESULTS', {
       count: articles.length,
+      requestUrl: searchResult.requestUrl,
       articles: articles.map((a) => ({
         title: a.title,
         source: a.source,

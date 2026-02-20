@@ -1,6 +1,6 @@
 import { ArticleMeta } from '../types';
 import { searchNews as searchNewsAPI } from './newsapi';
-import { searchGNews } from './gnews';
+import { searchGNews, GNewsResult } from './gnews';
 
 interface SearchParams {
   query: string;
@@ -8,6 +8,11 @@ interface SearchParams {
   to?: string;
   pageSize?: number;
   sortBy?: 'publishedAt' | 'relevancy' | 'popularity';
+}
+
+export interface NewsSearchResult {
+  articles: ArticleMeta[];
+  requestUrl?: string; // URL for debugging (only for GNews)
 }
 
 type NewsProvider = 'newsapi' | 'gnews' | 'auto';
@@ -37,7 +42,7 @@ function isLocalhost(): boolean {
  * - Uses NewsAPI on localhost (free tier works locally)
  * - Uses GNews in production (free tier works everywhere)
  */
-export async function searchNews(params: SearchParams): Promise<ArticleMeta[]> {
+export async function searchNews(params: SearchParams): Promise<NewsSearchResult> {
   const provider = getProvider();
 
   // Determine which provider to use
@@ -58,17 +63,23 @@ export async function searchNews(params: SearchParams): Promise<ArticleMeta[]> {
       throw new Error('NEWS_API_KEY is not configured');
     }
     console.log('[News] Using NewsAPI');
-    return searchNewsAPI(params);
+    const articles = await searchNewsAPI(params);
+    return { articles };
   } else {
     if (!process.env.GNEWS_API_KEY) {
       // Fall back to NewsAPI if GNews key is not set but NewsAPI is
       if (process.env.NEWS_API_KEY && isLocalhost()) {
         console.log('[News] GNEWS_API_KEY not set, falling back to NewsAPI (localhost only)');
-        return searchNewsAPI(params);
+        const articles = await searchNewsAPI(params);
+        return { articles };
       }
       throw new Error('GNEWS_API_KEY is not configured. Get a free key at https://gnews.io/');
     }
     console.log('[News] Using GNews');
-    return searchGNews(params);
+    const result = await searchGNews(params);
+    return {
+      articles: result.articles,
+      requestUrl: result.requestUrl,
+    };
   }
 }
