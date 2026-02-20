@@ -62,7 +62,13 @@ export async function runSummarizer(iterationId: string): Promise<void> {
   }
 
   const task = iteration.task;
-  const slots = (task.context as IntentSlots) || {};
+  const context = (task.context as IntentSlots & { freeTierMode?: boolean }) || {};
+  const slots: IntentSlots = {
+    topic: context.topic,
+    timeWindow: context.timeWindow,
+    outputType: context.outputType,
+  };
+  const freeTierMode = context.freeTierMode !== false; // Default to true
 
   try {
     // Update iteration status
@@ -82,6 +88,7 @@ export async function runSummarizer(iterationId: string): Promise<void> {
       from: slots.timeWindow?.start,
       to: slots.timeWindow?.end,
       pageSize: 30,
+      freeTierMode,
     });
     const articles = searchResult.articles;
 
@@ -89,6 +96,7 @@ export async function runSummarizer(iterationId: string): Promise<void> {
     await emitEvent(task.id, 'SUMMARIZER', 'SEARCH_RESULTS', {
       count: articles.length,
       requestUrl: searchResult.requestUrl,
+      dateRange: searchResult.dateRange,
       articles: articles.map((a) => ({
         title: a.title,
         source: a.source,

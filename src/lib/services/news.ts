@@ -8,11 +8,13 @@ interface SearchParams {
   to?: string;
   pageSize?: number;
   sortBy?: 'publishedAt' | 'relevancy' | 'popularity';
+  freeTierMode?: boolean;
 }
 
 export interface NewsSearchResult {
   articles: ArticleMeta[];
   requestUrl?: string; // URL for debugging (only for GNews)
+  dateRange?: { from: string; to: string }; // Date range used (for free tier)
 }
 
 type NewsProvider = 'newsapi' | 'gnews' | 'auto';
@@ -80,6 +82,7 @@ export async function searchNews(params: SearchParams): Promise<NewsSearchResult
     return {
       articles: result.articles,
       requestUrl: result.requestUrl,
+      dateRange: result.dateRange,
     };
   }
 }

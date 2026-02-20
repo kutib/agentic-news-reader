@@ -36,6 +36,7 @@ interface Phase {
   source?: string;
   articles?: Array<{ title: string; url: string; source: string }>;
   requestUrl?: string; // GNews API request URL for debugging
+  dateRange?: { from: string; to: string }; // Date range used for search
   notes?: Record<string, string[]>; // Notes extracted from article
   summary?: string; // Summary text
 }
@@ -103,11 +104,20 @@ export function ResearchProgress({ task, events, debugMode = false }: ResearchPr
           break;
 
         case 'SEARCH_RESULTS': {
-          const payload = event.payload as { count?: number; requestUrl?: string; articles?: Array<{ title: string; url: string; source: string }> };
+          const payload = event.payload as {
+            count?: number;
+            requestUrl?: string;
+            dateRange?: { from: string; to: string };
+            articles?: Array<{ title: string; url: string; source: string }>;
+          };
           if (currentSearch) {
             currentSearch.details = [`Found ${payload.count || 0} articles`];
+            if (payload.dateRange) {
+              currentSearch.details.push(`Searching: ${payload.dateRange.from} to ${payload.dateRange.to}`);
+            }
             currentSearch.articles = payload.articles || [];
             currentSearch.requestUrl = payload.requestUrl;
+            currentSearch.dateRange = payload.dateRange;
             currentSearch.status = 'done';
           }
           break;
@@ -375,6 +385,11 @@ function PhaseItem({ phase, debugMode = false }: { phase: Phase; debugMode?: boo
           <span className={`text-xs ${hasArticles ? 'text-gray-400' : 'text-red-400'}`}>
             {phase.articles?.length || 0} found
           </span>
+          {phase.dateRange && (
+            <span className="text-xs text-blue-400" title="Free tier date range">
+              ({phase.dateRange.from} → {phase.dateRange.to})
+            </span>
+          )}
         </div>
         {hasArticles ? (
           <div className="px-3 py-2 space-y-0.5 max-h-32 overflow-y-auto bg-gray-50 dark:bg-gray-900/30">

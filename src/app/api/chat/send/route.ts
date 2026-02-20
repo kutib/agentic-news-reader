@@ -127,6 +127,14 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, freeTierM
   const slots = (task.context as IntentSlots) || {};
   const sources = (task.sources as Array<{ title: string; url: string; source: string }>) || [];
 
+  // Store freeTierMode in task context for the summarizer to use
+  await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      context: { ...slots, freeTierMode },
+    },
+  });
+
   const decision = await runAnalyst({
     taskId: task.id,
     request: task.currentRequest || '',

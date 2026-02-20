@@ -28,6 +28,7 @@ interface SearchParams {
   to?: string;
   pageSize?: number;
   sortBy?: 'publishedAt' | 'relevancy' | 'popularity';
+  freeTierMode?: boolean;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -36,7 +37,8 @@ async function sleep(ms: number): Promise<void> {
 
 export interface GNewsResult {
   articles: ArticleMeta[];
-  requestUrl: string; // URL without API key for debugging
+  requestUrl: string; // URL for debugging
+  dateRange?: { from: string; to: string }; // Date range used (for free tier)
 }
 
 export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
@@ -57,14 +59,25 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
   }
 
   // GNews date format: YYYY-MM-DDTHH:MM:SSZ
-  // Note: Removing date filters as they may be too restrictive
-  // and GNews free tier has limited historical data
-  // if (params.from) {
-  //   url.searchParams.set('from', params.from);
-  // }
-  // if (params.to) {
-  //   url.searchParams.set('to', params.to);
-  // }
+  // For free tier: limit to 20 days ago to 1 day ago (avoid 12-hour delay and 30-day limit)
+  let dateRange: { from: string; to: string } | undefined;
+
+  if (params.freeTierMode !== false) {
+    const now = new Date();
+    const fromDate = new Date(now);
+    fromDate.setDate(fromDate.getDate() - 20); // 20 days ago
+    const toDate = new Date(now);
+    toDate.setDate(toDate.getDate() - 1); // 1 day ago
+
+    const fromStr = fromDate.toISOString().split('T')[0] + 'T00:00:00Z';
+    const toStr = toDate.toISOString().split('T')[0] + 'T23:59:59Z';
+
+    url.searchParams.set('from', fromStr);
+    url.searchParams.set('to', toStr);
+
+    dateRange = { from: fromStr.split('T')[0], to: toStr.split('T')[0] };
+    console.log(`[GNews] Free tier mode: searching ${dateRange.from} to ${dateRange.to}`);
+  }
 
   // Add API key last
   url.searchParams.set('apikey', apiKey);
@@ -115,6 +128,7 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
         return {
           articles: [],
           requestUrl: displayUrl.toString(),
+          dateRange,
         };
       }
 
@@ -130,6 +144,7 @@ export async function searchGNews(params: SearchParams): Promise<GNewsResult> {
       return {
         articles,
         requestUrl: displayUrl.toString(),
+        dateRange,
       };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
