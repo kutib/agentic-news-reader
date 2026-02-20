@@ -228,18 +228,10 @@ function PhaseItem({ phase }: { phase: Phase }) {
   const iconClass = {
     search: 'text-purple-500',
     reading: 'text-blue-500',
-    analysis: 'text-orange-500',
+    analysis: 'text-amber-500',
     complete: 'text-green-500',
     error: 'text-red-500',
   }[phase.type] || 'text-gray-500';
-
-  const bgClass = {
-    search: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800',
-    reading: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-    analysis: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800',
-    complete: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-    error: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
-  }[phase.type] || 'bg-gray-50 dark:bg-gray-800';
 
   const icon = {
     search: (
@@ -272,7 +264,7 @@ function PhaseItem({ phase }: { phase: Phase }) {
   // For reading phases, show as a compact link
   if (phase.type === 'reading') {
     return (
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${bgClass}`}>
+      <div className="flex items-center gap-2 py-1.5 border-b border-gray-100 dark:border-gray-700/50 last:border-0">
         <div className="flex-shrink-0">
           {phase.status === 'running' ? (
             <div className={`w-3 h-3 border-2 border-current ${iconClass} border-t-transparent rounded-full animate-spin`} />
@@ -288,7 +280,7 @@ function PhaseItem({ phase }: { phase: Phase }) {
               href={phase.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block"
+              className="text-xs text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline truncate block"
               title={phase.title}
             >
               {phase.title}
@@ -307,8 +299,8 @@ function PhaseItem({ phase }: { phase: Phase }) {
   // For search phases, show articles list
   if (phase.type === 'search' && phase.articles && phase.articles.length > 0) {
     return (
-      <div className={`rounded-lg border ${bgClass} overflow-hidden`}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-inherit">
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800/50">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700">
           <div className="flex-shrink-0">
             {phase.status === 'running' ? (
               <div className={`w-4 h-4 border-2 border-current ${iconClass} border-t-transparent rounded-full animate-spin`} />
@@ -316,21 +308,21 @@ function PhaseItem({ phase }: { phase: Phase }) {
               icon
             )}
           </div>
-          <span className="text-sm font-medium text-gray-900 dark:text-white">{phase.title}</span>
-          <span className="text-xs text-gray-500 ml-auto">{phase.articles.length} articles</span>
+          <span className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1">{phase.title}</span>
+          <span className="text-xs text-gray-400">{phase.articles.length} found</span>
         </div>
-        <div className="px-3 py-2 space-y-1 max-h-40 overflow-y-auto">
+        <div className="px-3 py-2 space-y-0.5 max-h-32 overflow-y-auto bg-gray-50 dark:bg-gray-900/30">
           {phase.articles.map((article, idx) => (
             <a
               key={idx}
               href={article.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 text-xs hover:bg-white/50 dark:hover:bg-gray-800/50 rounded px-1 py-0.5 -mx-1"
+              className="flex items-center gap-2 text-xs hover:bg-white dark:hover:bg-gray-800 rounded px-1.5 py-1 -mx-1.5 group"
             >
-              <span className="text-gray-400">{idx + 1}.</span>
-              <span className="text-blue-600 dark:text-blue-400 hover:underline truncate flex-1">{article.title}</span>
-              <span className="text-gray-400 flex-shrink-0">{article.source}</span>
+              <span className="text-gray-300 dark:text-gray-600 w-4 text-right">{idx + 1}</span>
+              <span className="text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white truncate flex-1">{article.title}</span>
+              <span className="text-gray-300 dark:text-gray-600 flex-shrink-0 text-[10px]">{article.source}</span>
             </a>
           ))}
         </div>
@@ -340,7 +332,7 @@ function PhaseItem({ phase }: { phase: Phase }) {
 
   // Default rendering for other phases
   return (
-    <div className={`flex items-start gap-3 px-3 py-2 rounded-lg border ${bgClass}`}>
+    <div className="flex items-start gap-3 py-2">
       <div className="flex-shrink-0 mt-0.5">
         {phase.status === 'running' ? (
           <div className={`w-4 h-4 border-2 border-current ${iconClass} border-t-transparent rounded-full animate-spin`} />
@@ -349,13 +341,13 @@ function PhaseItem({ phase }: { phase: Phase }) {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium ${phase.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+        <p className={`text-sm ${phase.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
           {phase.title}
         </p>
         {phase.details.length > 0 && (
-          <ul className="mt-1 space-y-0.5">
+          <ul className="mt-0.5 space-y-0.5">
             {phase.details.map((detail, idx) => (
-              <li key={idx} className="text-xs text-gray-500 dark:text-gray-400">
+              <li key={idx} className="text-xs text-gray-400 dark:text-gray-500">
                 {detail}
               </li>
             ))}
