@@ -2,6 +2,9 @@
   "name": "agentic-news-reader",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "prisma generate && next build",
@@ -17,8 +20,8 @@
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "@prisma/client": "^5.22.0",
-    "jsdom": "^28.0.0",
-    "next": "15.3.3",
+    "jsdom": "^24.1.3",
+    "next": "^16.1.6",
     "openai": "^6.18.0",
     "prisma": "^5.22.0",
     "react": "^19.0.0",
@@ -29,14 +32,14 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "@types/jsdom": "^27.0.0",
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^5.1.3",
     "eslint": "^9",
-    "eslint-config-next": "15.3.3",
+    "eslint-config-next": "^16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.0.18"
