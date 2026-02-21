@@ -15,6 +15,7 @@ interface SendRequest {
   message: string;
   maxSearches?: number;
   enabledProviders?: NewsProvider[];
+  resultsPerSearch?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -96,7 +97,8 @@ export async function POST(request: NextRequest) {
       if (task && (task.status === 'ACTIVE' || task.status === 'WAITING_ANALYST')) {
         // Run analyst asynchronously (don't await to return quickly)
         const enabledProviders = body.enabledProviders || ALL_PROVIDERS;
-        triggerAnalyst(task.id, body.maxSearches || 1, enabledProviders).catch((error) => {
+        const resultsPerSearch = body.resultsPerSearch || 10;
+        triggerAnalyst(task.id, body.maxSearches || 1, enabledProviders, 0, resultsPerSearch).catch((error) => {
           console.error('Error triggering analyst:', error);
         });
       }
@@ -122,7 +124,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function triggerAnalyst(taskId: string, maxSearches: number = 1, enabledProviders: NewsProvider[] = ALL_PROVIDERS, depth: number = 0): Promise<void> {
+async function triggerAnalyst(taskId: string, maxSearches: number = 1, enabledProviders: NewsProvider[] = ALL_PROVIDERS, depth: number = 0, resultsPerSearch: number = 10): Promise<void> {
   // Prevent infinite recursion
   const MAX_DEPTH = 10;
   if (depth >= MAX_DEPTH) {
@@ -200,7 +202,7 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, enabledPr
       if (pendingIteration) {
         // Import and run summarizer
         const { runSummarizer } = await import('@/lib/agents/summarizer');
-        await runSummarizer(pendingIteration.id);
+        await runSummarizer(pendingIteration.id, resultsPerSearch);
 
         // After summarizer completes (success or failure), check if we need another analyst pass
         const updatedTask = await prisma.task.findUnique({
@@ -209,7 +211,7 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, enabledPr
 
         if (updatedTask && updatedTask.status === 'WAITING_ANALYST') {
           // Analyst will see the error and can choose a different provider
-          await triggerAnalyst(taskId, maxSearches, enabledProviders, depth + 1);
+          await triggerAnalyst(taskId, maxSearches, enabledProviders, depth + 1, resultsPerSearch);
         }
       }
     }

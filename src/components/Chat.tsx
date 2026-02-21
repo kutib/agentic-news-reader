@@ -11,7 +11,7 @@ const ALL_PROVIDERS: NewsProvider[] = ['newsdata', 'currents', 'gnews', 'guardia
 // Read settings from localStorage (same as ChatInput)
 function getStoredSettings() {
   if (typeof window === 'undefined') {
-    return { maxSearches: 1, debugMode: false, enabledProviders: ALL_PROVIDERS };
+    return { maxSearches: 1, debugMode: false, enabledProviders: ALL_PROVIDERS, resultsPerSearch: 10 };
   }
   try {
     const saved = localStorage.getItem('newsReaderSettings');
@@ -21,12 +21,13 @@ function getStoredSettings() {
         maxSearches: parsed.maxSearches || 1,
         debugMode: parsed.debugMode || false,
         enabledProviders: parsed.enabledProviders || ALL_PROVIDERS,
+        resultsPerSearch: parsed.resultsPerSearch || 10,
       };
     }
   } catch {
     // Ignore
   }
-  return { maxSearches: 1, debugMode: false, enabledProviders: ALL_PROVIDERS };
+  return { maxSearches: 1, debugMode: false, enabledProviders: ALL_PROVIDERS, resultsPerSearch: 10 };
 }
 
 interface Message {
@@ -130,12 +131,13 @@ export function Chat() {
     }
   };
 
-  const sendMessage = useCallback(async (text: string, maxSearches?: number, debugModeParam?: boolean, enabledProviders?: string[]) => {
+  const sendMessage = useCallback(async (text: string, maxSearches?: number, debugModeParam?: boolean, enabledProviders?: string[], resultsPerSearch?: number) => {
     // Read settings from localStorage if not provided (for predefined messages)
     const storedSettings = getStoredSettings();
     const finalMaxSearches = maxSearches ?? storedSettings.maxSearches;
     const finalDebugMode = debugModeParam ?? storedSettings.debugMode;
     const finalEnabledProviders = enabledProviders ?? storedSettings.enabledProviders;
+    const finalResultsPerSearch = resultsPerSearch ?? storedSettings.resultsPerSearch;
 
     setIsLoading(true);
     setError(null);
@@ -163,6 +165,7 @@ export function Chat() {
           message: text,
           maxSearches: finalMaxSearches,
           enabledProviders: finalEnabledProviders,
+          resultsPerSearch: finalResultsPerSearch,
         }),
       });
 

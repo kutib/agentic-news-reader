@@ -13,7 +13,7 @@ const ALL_PROVIDERS: { id: NewsProvider; name: string; description: string }[] =
 ];
 
 interface ChatInputProps {
-  onSend: (message: string, maxSearches: number, debugMode: boolean, enabledProviders: NewsProvider[]) => void;
+  onSend: (message: string, maxSearches: number, debugMode: boolean, enabledProviders: NewsProvider[], resultsPerSearch: number) => void;
   isLoading: boolean;
   placeholder?: string;
   showSettings: boolean;
@@ -26,7 +26,8 @@ function loadSettings() {
     return {
       maxSearches: 1,
       debugMode: false,
-      enabledProviders: ALL_PROVIDERS.map(p => p.id)
+      enabledProviders: ALL_PROVIDERS.map(p => p.id),
+      resultsPerSearch: 10
     };
   }
   try {
@@ -45,7 +46,8 @@ function loadSettings() {
   return {
     maxSearches: 1,
     debugMode: false,
-    enabledProviders: ALL_PROVIDERS.map(p => p.id)
+    enabledProviders: ALL_PROVIDERS.map(p => p.id),
+    resultsPerSearch: 10
   };
 }
 
@@ -54,6 +56,7 @@ export function ChatInput({ onSend, isLoading, placeholder, showSettings, onShow
   const [maxSearches, setMaxSearches] = useState(1);
   const [debugMode, setDebugMode] = useState(false);
   const [enabledProviders, setEnabledProviders] = useState<NewsProvider[]>(ALL_PROVIDERS.map(p => p.id));
+  const [resultsPerSearch, setResultsPerSearch] = useState(10);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -63,6 +66,7 @@ export function ChatInput({ onSend, isLoading, placeholder, showSettings, onShow
     setMaxSearches(settings.maxSearches || 1);
     setDebugMode(settings.debugMode || false);
     setEnabledProviders(settings.enabledProviders || ALL_PROVIDERS.map(p => p.id));
+    setResultsPerSearch(settings.resultsPerSearch || 10);
     setSettingsLoaded(true);
   }, []);
 
@@ -74,11 +78,12 @@ export function ChatInput({ onSend, isLoading, placeholder, showSettings, onShow
         maxSearches,
         debugMode,
         enabledProviders,
+        resultsPerSearch,
       }));
     } catch {
       // Ignore storage errors
     }
-  }, [maxSearches, debugMode, enabledProviders, settingsLoaded]);
+  }, [maxSearches, debugMode, enabledProviders, resultsPerSearch, settingsLoaded]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -92,7 +97,7 @@ export function ChatInput({ onSend, isLoading, placeholder, showSettings, onShow
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (message.trim() && !isLoading && enabledProviders.length > 0) {
-      onSend(message.trim(), maxSearches, debugMode, enabledProviders);
+      onSend(message.trim(), maxSearches, debugMode, enabledProviders, resultsPerSearch);
       setMessage('');
     }
   };
@@ -233,6 +238,26 @@ export function ChatInput({ onSend, isLoading, placeholder, showSettings, onShow
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               More searches = more sources but uses more API quota
+            </p>
+
+            <div className="border-t border-gray-200 dark:border-gray-600 pt-3 flex items-center justify-between">
+              <label className="text-sm text-gray-700 dark:text-gray-300">
+                Articles per search
+              </label>
+              <select
+                value={resultsPerSearch}
+                onChange={(e) => setResultsPerSearch(Number(e.target.value))}
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm text-gray-900 dark:text-white"
+              >
+                <option value={5}>5 (fast)</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={30}>30 (thorough)</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              More articles = better coverage but slower processing
             </p>
 
             <div className="border-t border-gray-200 dark:border-gray-600 pt-3">

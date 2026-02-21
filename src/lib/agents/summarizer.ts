@@ -48,7 +48,7 @@ interface NotesResponse {
   uncertainties: string[];
 }
 
-export async function runSummarizer(iterationId: string): Promise<void> {
+export async function runSummarizer(iterationId: string, resultsPerSearch: number = 10): Promise<void> {
   // Get the iteration with task context
   const iteration = await prisma.searchIteration.findUnique({
     where: { id: iterationId },
@@ -84,12 +84,12 @@ export async function runSummarizer(iterationId: string): Promise<void> {
       provider,
     }, iterationId);
 
-    // Search for articles - fetch many sources for comprehensive research
+    // Search for articles - fetch based on user setting
     const searchResult = await searchNews({
       query: iteration.query,
       from: slots.timeWindow?.start,
       to: slots.timeWindow?.end,
-      pageSize: 30,
+      pageSize: resultsPerSearch,
       provider,
     });
     const articles = searchResult.articles;
