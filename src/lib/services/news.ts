@@ -2,6 +2,7 @@ import { ArticleMeta } from '../types';
 import { searchNews as searchNewsAPI } from './newsapi';
 import { searchGNews } from './gnews';
 import { searchNewsData } from './newsdata';
+import { searchCurrents } from './currents';
 
 export type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
 
@@ -67,8 +68,16 @@ export async function searchNews(params: SearchParams): Promise<NewsSearchResult
     }
 
     case 'currents': {
-      // TODO: Implement Currents API
-      throw new Error('Currents API is not yet implemented.');
+      if (!process.env.CURRENTS_API_KEY) {
+        throw new Error('CURRENTS_API_KEY is not configured. Get a free key at https://currentsapi.services/');
+      }
+      console.log('[News] Using Currents API');
+      const result = await searchCurrents(params);
+      return {
+        articles: result.articles,
+        requestUrl: result.requestUrl,
+        provider: 'currents',
+      };
     }
 
     case 'mediastack': {
