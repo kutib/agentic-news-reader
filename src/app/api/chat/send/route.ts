@@ -8,11 +8,13 @@ export const maxDuration = 60; // 60 seconds max for Vercel
 
 type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
 
+const ALL_PROVIDERS: NewsProvider[] = ['newsdata', 'currents', 'gnews', 'guardian', 'mediastack'];
+
 interface SendRequest {
   conversationId?: string;
   message: string;
   maxSearches?: number;
-  provider?: NewsProvider;
+  enabledProviders?: NewsProvider[];
 }
 
 export async function POST(request: NextRequest) {
@@ -93,7 +95,8 @@ export async function POST(request: NextRequest) {
 
       if (task && (task.status === 'ACTIVE' || task.status === 'WAITING_ANALYST')) {
         // Run analyst asynchronously (don't await to return quickly)
-        triggerAnalyst(task.id, body.maxSearches || 1).catch((error) => {
+        const enabledProviders = body.enabledProviders || ALL_PROVIDERS;
+        triggerAnalyst(task.id, body.maxSearches || 1, enabledProviders).catch((error) => {
           console.error('Error triggering analyst:', error);
         });
       }
@@ -119,7 +122,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function triggerAnalyst(taskId: string, maxSearches: number = 1): Promise<void> {
+async function triggerAnalyst(taskId: string, maxSearches: number = 1, enabledProviders: NewsProvider[] = ALL_PROVIDERS): Promise<void> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
@@ -166,6 +169,7 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1): Promise<
     iterationCount: task.iterationCount,
     maxSearches,
     iterationHistory,
+    enabledProviders,
   });
 
   await processAnalystDecision(taskId, decision);
@@ -191,7 +195,7 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1): Promise<
         });
 
         if (updatedTask && updatedTask.status === 'WAITING_ANALYST') {
-          await triggerAnalyst(taskId, maxSearches);
+          await triggerAnalyst(taskId, maxSearches, enabledProviders);
         }
       } catch (error) {
         console.error('Error in summarizer:', error);

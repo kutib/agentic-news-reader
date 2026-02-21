@@ -4,8 +4,16 @@ import { useState, useRef, useEffect, KeyboardEvent, FormEvent } from 'react';
 
 type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
 
+const ALL_PROVIDERS: { id: NewsProvider; name: string; description: string }[] = [
+  { id: 'newsdata', name: 'NewsData.io', description: '200/day' },
+  { id: 'currents', name: 'Currents', description: '600/day' },
+  { id: 'gnews', name: 'GNews', description: '100/day' },
+  { id: 'guardian', name: 'The Guardian', description: 'Unlimited' },
+  { id: 'mediastack', name: 'Mediastack', description: '500/month' },
+];
+
 interface ChatInputProps {
-  onSend: (message: string, maxSearches: number, debugMode: boolean, provider: NewsProvider) => void;
+  onSend: (message: string, maxSearches: number, debugMode: boolean, enabledProviders: NewsProvider[]) => void;
   isLoading: boolean;
   placeholder?: string;
 }
@@ -13,24 +21,37 @@ interface ChatInputProps {
 // Load settings from localStorage
 function loadSettings() {
   if (typeof window === 'undefined') {
-    return { maxSearches: 1, debugMode: false, provider: 'gnews' as NewsProvider };
+    return {
+      maxSearches: 1,
+      debugMode: false,
+      enabledProviders: ALL_PROVIDERS.map(p => p.id)
+    };
   }
   try {
     const saved = localStorage.getItem('newsReaderSettings');
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      // Migration: if old 'provider' field exists, convert to enabledProviders
+      if (parsed.provider && !parsed.enabledProviders) {
+        parsed.enabledProviders = ALL_PROVIDERS.map(p => p.id);
+      }
+      return parsed;
     }
   } catch {
     // Ignore parse errors
   }
-  return { maxSearches: 1, debugMode: false, provider: 'gnews' as NewsProvider };
+  return {
+    maxSearches: 1,
+    debugMode: false,
+    enabledProviders: ALL_PROVIDERS.map(p => p.id)
+  };
 }
 
 export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [maxSearches, setMaxSearches] = useState(1);
   const [debugMode, setDebugMode] = useState(false);
-  const [provider, setProvider] = useState<NewsProvider>('gnews');
+  const [enabledProviders, setEnabledProviders] = useState<NewsProvider[]>(ALL_PROVIDERS.map(p => p.id));
   const [showSettings, setShowSettings] = useState(true);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -40,7 +61,7 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
     const settings = loadSettings();
     setMaxSearches(settings.maxSearches || 1);
     setDebugMode(settings.debugMode || false);
-    setProvider(settings.provider || 'gnews');
+    setEnabledProviders(settings.enabledProviders || ALL_PROVIDERS.map(p => p.id));
     setSettingsLoaded(true);
   }, []);
 
@@ -51,12 +72,12 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
       localStorage.setItem('newsReaderSettings', JSON.stringify({
         maxSearches,
         debugMode,
-        provider,
+        enabledProviders,
       }));
     } catch {
       // Ignore storage errors
     }
-  }, [maxSearches, debugMode, provider, settingsLoaded]);
+  }, [maxSearches, debugMode, enabledProviders, settingsLoaded]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -69,8 +90,8 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !isLoading) {
-      onSend(message.trim(), maxSearches, debugMode, provider);
+    if (message.trim() && !isLoading && enabledProviders.length > 0) {
+      onSend(message.trim(), maxSearches, debugMode, enabledProviders);
       setMessage('');
       setShowSettings(false); // Close settings after first message
     }
@@ -80,6 +101,27 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
+    }
+  };
+
+  const toggleProvider = (providerId: NewsProvider) => {
+    setEnabledProviders(prev => {
+      if (prev.includes(providerId)) {
+        // Don't allow disabling all providers
+        if (prev.length === 1) return prev;
+        return prev.filter(p => p !== providerId);
+      } else {
+        return [...prev, providerId];
+      }
+    });
+  };
+
+  const toggleAll = () => {
+    if (enabledProviders.length === ALL_PROVIDERS.length) {
+      // Keep at least one (newsdata)
+      setEnabledProviders(['newsdata']);
+    } else {
+      setEnabledProviders(ALL_PROVIDERS.map(p => p.id));
     }
   };
 
@@ -113,7 +155,7 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
           />
           <button
             type="submit"
-            disabled={!message.trim() || isLoading}
+            disabled={!message.trim() || isLoading || enabledProviders.length === 0}
             className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
           >
             {isLoading ? (
@@ -129,29 +171,46 @@ export function ChatInput({ onSend, isLoading, placeholder }: ChatInputProps) {
         {showSettings && (
           <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-sm text-gray-700 dark:text-gray-300">
-                News Provider
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                News Sources
               </label>
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value as NewsProvider)}
-                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm text-gray-900 dark:text-white"
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
               >
-                <option value="newsdata">NewsData.io (recommended)</option>
-                <option value="gnews">GNews</option>
-                <option value="currents">Currents API</option>
-                <option value="mediastack">Mediastack</option>
-                <option value="guardian">The Guardian</option>
-                <option value="newsapi">NewsAPI (localhost only)</option>
-              </select>
+                {enabledProviders.length === ALL_PROVIDERS.length ? 'Disable all' : 'Enable all'}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {ALL_PROVIDERS.map((provider) => (
+                <label
+                  key={provider.id}
+                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
+                    enabledProviders.includes(provider.id)
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                      : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 opacity-60'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enabledProviders.includes(provider.id)}
+                    onChange={() => toggleProvider(provider.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {provider.name}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {provider.description}
+                    </div>
+                  </div>
+                </label>
+              ))}
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {provider === 'newsdata' && '200 req/day, no restrictions'}
-              {provider === 'gnews' && '100 req/day, 12h delay, 30-day history'}
-              {provider === 'currents' && '600 req/day, good coverage'}
-              {provider === 'mediastack' && '500 req/month, historical data'}
-              {provider === 'guardian' && '500 req/day, UK-focused'}
-              {provider === 'newsapi' && 'Localhost only (free tier blocked in production)'}
+              The AI analyst will choose the best source for each search query
             </p>
 
             <div className="border-t border-gray-200 dark:border-gray-600 pt-3 flex items-center justify-between">

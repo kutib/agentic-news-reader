@@ -105,7 +105,7 @@ export function Chat() {
     }
   };
 
-  const sendMessage = useCallback(async (text: string, maxSearches: number = 1, debugModeParam: boolean = false, provider: string = 'gnews') => {
+  const sendMessage = useCallback(async (text: string, maxSearches: number = 1, debugModeParam: boolean = false, enabledProviders: string[] = ['newsdata', 'currents', 'gnews', 'guardian', 'mediastack']) => {
     setIsLoading(true);
     setError(null);
     setDebugModeState(debugModeParam);
@@ -130,7 +130,7 @@ export function Chat() {
           conversationId,
           message: text,
           maxSearches,
-          provider,
+          enabledProviders,
         }),
       });
 

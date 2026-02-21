@@ -117,6 +117,7 @@ interface AnalystInput {
   iterationCount: number;
   maxSearches?: number;
   iterationHistory?: SearchIterationHistory[];
+  enabledProviders?: NewsProvider[];
 }
 
 interface AnalystResponse {
@@ -128,40 +129,52 @@ interface AnalystResponse {
   citations?: Array<{ number: number; title: string; url: string; source: string }>;
 }
 
-// Default provider when not specified or invalid
-const DEFAULT_PROVIDER: NewsProvider = 'newsdata';
-
 // Valid providers (excluding newsapi which only works on localhost)
 const VALID_PROVIDERS: NewsProvider[] = ['newsdata', 'gnews', 'guardian', 'currents', 'mediastack'];
 
-function isValidProvider(provider: string | undefined): provider is NewsProvider {
-  return VALID_PROVIDERS.includes(provider as NewsProvider);
+// Provider info for building prompts
+const PROVIDER_INFO: Record<NewsProvider, { name: string; description: string }> = {
+  newsdata: { name: 'NewsData.io', description: '200/day, most reliable' },
+  gnews: { name: 'GNews', description: '100/day, US-focused, simple queries only' },
+  guardian: { name: 'The Guardian', description: 'Unlimited, UK/international' },
+  currents: { name: 'Currents', description: '600/day, wide coverage' },
+  mediastack: { name: 'Mediastack', description: '500/month, historical data' },
+  newsapi: { name: 'NewsAPI', description: 'Localhost only' },
+};
+
+function isValidProviderForList(provider: string | undefined, enabledList: NewsProvider[]): provider is NewsProvider {
+  return enabledList.includes(provider as NewsProvider);
 }
 
 /**
  * Get an alternate provider when the current one fails.
  * Prioritizes providers that haven't failed recently.
  */
-function getAlternateProvider(failedProvider: NewsProvider, recentlyFailedProviders: NewsProvider[]): NewsProvider {
+function getAlternateProvider(failedProvider: NewsProvider, recentlyFailedProviders: NewsProvider[], enabledList: NewsProvider[]): NewsProvider {
   // Priority order: newsdata (most reliable), gnews, currents, guardian, mediastack
   const priority: NewsProvider[] = ['newsdata', 'gnews', 'currents', 'guardian', 'mediastack'];
 
-  // Find first provider that hasn't failed
+  // Find first enabled provider that hasn't failed
   for (const provider of priority) {
-    if (provider !== failedProvider && !recentlyFailedProviders.includes(provider)) {
+    if (enabledList.includes(provider) && provider !== failedProvider && !recentlyFailedProviders.includes(provider)) {
       return provider;
     }
   }
 
-  // If all have failed, return newsdata as it's most forgiving
-  return failedProvider === 'newsdata' ? 'gnews' : 'newsdata';
+  // If all enabled have failed, return first enabled one
+  return enabledList[0] || 'newsdata';
 }
 
 export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> {
-  const { taskId, request, slots, notes, summary, sources, iterationCount, maxSearches, iterationHistory } = input;
+  const { taskId, request, slots, notes, summary, sources, iterationCount, maxSearches, iterationHistory, enabledProviders } = input;
 
   // Use maxSearches from input, or fall back to env var, or default to 1
   const maxIterations = maxSearches || MAX_ITERATIONS;
+
+  // Use enabled providers or default to all valid providers
+  const activeProviders: NewsProvider[] = enabledProviders && enabledProviders.length > 0
+    ? enabledProviders.filter((p): p is NewsProvider => VALID_PROVIDERS.includes(p))
+    : [...VALID_PROVIDERS];
 
   // Check for failed iterations with API errors
   const failedIterations = await prisma.searchIteration.findMany({
@@ -211,8 +224,8 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
       return failDecision;
     }
 
-    // Get a different provider to try
-    const alternateProvider = getAlternateProvider(failedProvider, recentFailures.map((f: { provider: string }) => f.provider as NewsProvider));
+    // Get a different provider to try from enabled providers
+    const alternateProvider = getAlternateProvider(failedProvider, recentFailures.map((f: { provider: string }) => f.provider as NewsProvider), activeProviders);
 
     // Pass the error to the LLM so it can generate a better query and choose provider
     console.log(`[Analyst] Previous query failed on ${failedProvider}: "${failedIteration.query}" - Error: ${errorMsg}`);
@@ -237,7 +250,7 @@ INSTRUCTIONS FOR RETRY:
 4. If the error mentions "rate limit", switch to a different provider`;
 
     // Build prompt with error context
-    const userPromptWithError = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, false, iterationHistory) + errorContext;
+    const userPromptWithError = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, false, iterationHistory, activeProviders) + errorContext;
 
     try {
       const response = await generateCompletion({
@@ -251,7 +264,7 @@ INSTRUCTIONS FOR RETRY:
 
       if (parsed.decision === 'SEARCH' && parsed.query) {
         // Use LLM's provider choice or fall back to alternate
-        const newProvider = isValidProvider(parsed.provider) ? parsed.provider : alternateProvider;
+        const newProvider = isValidProviderForList(parsed.provider, activeProviders) ? parsed.provider : alternateProvider;
 
         // Make sure the new query is different from the failed one
         if (parsed.query.toLowerCase() === failedIteration.query.toLowerCase() && newProvider === failedProvider) {
@@ -312,7 +325,7 @@ INSTRUCTIONS FOR RETRY:
   }
 
   // Build prompt with current state
-  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, forceComplete, iterationHistory);
+  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, forceComplete, iterationHistory, activeProviders);
 
   try {
     const response = await generateCompletion({
@@ -366,8 +379,8 @@ INSTRUCTIONS FOR RETRY:
           throw new Error('SEARCH decision requires a query');
         }
 
-        // Use LLM's provider choice or default to newsdata
-        const selectedProvider = isValidProvider(parsed.provider) ? parsed.provider : DEFAULT_PROVIDER;
+        // Use LLM's provider choice or default to first enabled provider
+        const selectedProvider = isValidProviderForList(parsed.provider, activeProviders) ? parsed.provider : activeProviders[0];
 
         const searchDecision: AnalystDecision = {
           type: 'SEARCH',
@@ -453,7 +466,7 @@ INSTRUCTIONS FOR RETRY:
       return {
         type: 'SEARCH',
         query: fallbackQuery,
-        provider: DEFAULT_PROVIDER,
+        provider: activeProviders[0],
         reason: 'Initial search based on request',
       };
     }
@@ -471,7 +484,8 @@ function buildAnalystPrompt(
   iterationCount: number,
   maxIterations: number,
   forceComplete: boolean,
-  iterationHistory?: SearchIterationHistory[]
+  iterationHistory?: SearchIterationHistory[],
+  enabledProviders?: NewsProvider[]
 ): string {
   let prompt = `## USER REQUEST\n${request}\n\n`;
 
@@ -483,6 +497,17 @@ function buildAnalystPrompt(
     prompt += `- Time Window: Not specified\n`;
   }
   prompt += `- Output Type: ${slots.outputType || 'summary'}\n\n`;
+
+  // Show enabled providers
+  if (enabledProviders && enabledProviders.length > 0) {
+    prompt += `## ENABLED NEWS SOURCES\n`;
+    prompt += `You can ONLY use these providers:\n`;
+    enabledProviders.forEach((p) => {
+      const info = PROVIDER_INFO[p];
+      prompt += `- ${p}: ${info.name} (${info.description})\n`;
+    });
+    prompt += `\nChoose the best provider for your query. If one fails, try another from this list.\n\n`;
+  }
 
   prompt += `## CURRENT ITERATION: ${iterationCount + 1} of ${maxIterations}\n\n`;
 
