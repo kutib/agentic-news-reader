@@ -186,19 +186,16 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, enabledPr
     if (pendingIteration) {
       // Import and run summarizer
       const { runSummarizer } = await import('@/lib/agents/summarizer');
-      try {
-        await runSummarizer(pendingIteration.id);
+      await runSummarizer(pendingIteration.id);
 
-        // After summarizer completes, check if we need another analyst pass
-        const updatedTask = await prisma.task.findUnique({
-          where: { id: taskId },
-        });
+      // After summarizer completes (success or failure), check if we need another analyst pass
+      const updatedTask = await prisma.task.findUnique({
+        where: { id: taskId },
+      });
 
-        if (updatedTask && updatedTask.status === 'WAITING_ANALYST') {
-          await triggerAnalyst(taskId, maxSearches, enabledProviders);
-        }
-      } catch (error) {
-        console.error('Error in summarizer:', error);
+      if (updatedTask && updatedTask.status === 'WAITING_ANALYST') {
+        // Analyst will see the error and can choose a different provider
+        await triggerAnalyst(taskId, maxSearches, enabledProviders);
       }
     }
   }

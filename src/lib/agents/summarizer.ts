@@ -245,7 +245,7 @@ export async function runSummarizer(iterationId: string): Promise<void> {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // Mark iteration as failed
+    // Mark iteration as failed with full error details
     await prisma.searchIteration.update({
       where: { id: iterationId },
       data: {
@@ -258,15 +258,18 @@ export async function runSummarizer(iterationId: string): Promise<void> {
     await emitEvent(task.id, 'SUMMARIZER', 'ERROR', {
       error: 'Summarizer processing failed',
       details: errorMessage,
+      provider,
+      query: iteration.query,
     }, iterationId);
 
-    // Set task back to waiting analyst so it can retry or fail
+    // Set task back to waiting analyst so it can retry with different provider
     await prisma.task.update({
       where: { id: task.id },
       data: { status: 'WAITING_ANALYST' },
     });
 
-    throw error;
+    // Don't throw - let the flow continue so analyst can retry
+    console.error(`[Summarizer] Failed on ${provider}: ${errorMessage}`);
   }
 }
 
