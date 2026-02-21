@@ -53,9 +53,12 @@ export type UFAAction =
   | { type: 'ASK_CLARIFICATION'; question: string }
   | { type: 'RESPOND'; message: string };
 
+// News provider types
+export type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
+
 // Analyst Decision
 export type AnalystDecision =
-  | { type: 'SEARCH'; query: string; reason: string }
+  | { type: 'SEARCH'; query: string; provider: NewsProvider; reason: string }
   | { type: 'COMPLETE'; response: string; citations: Citation[] }
   | { type: 'FAIL'; reason: string };
 

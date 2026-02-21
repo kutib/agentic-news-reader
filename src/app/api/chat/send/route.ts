@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
       if (task && (task.status === 'ACTIVE' || task.status === 'WAITING_ANALYST')) {
         // Run analyst asynchronously (don't await to return quickly)
-        triggerAnalyst(task.id, body.maxSearches || 1, body.provider || 'gnews').catch((error) => {
+        triggerAnalyst(task.id, body.maxSearches || 1).catch((error) => {
           console.error('Error triggering analyst:', error);
         });
       }
@@ -119,9 +119,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function triggerAnalyst(taskId: string, maxSearches: number = 1, provider: NewsProvider = 'gnews'): Promise<void> {
+async function triggerAnalyst(taskId: string, maxSearches: number = 1): Promise<void> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
+    include: {
+      iterations: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          query: true,
+          provider: true,
+          status: true,
+          resultsCount: true,
+          error: true,
+        },
+      },
+    },
   });
 
   if (!task) return;
@@ -129,13 +141,20 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, provider:
   const slots = (task.context as IntentSlots) || {};
   const sources = (task.sources as Array<{ title: string; url: string; source: string }>) || [];
 
-  // Store provider in task context for the summarizer to use
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      context: { ...slots, provider },
-    },
-  });
+  // Build iteration history for the analyst
+  const iterationHistory = task.iterations.map((iter: {
+    query: string;
+    provider: string;
+    status: string;
+    resultsCount: number | null;
+    error: string | null;
+  }) => ({
+    query: iter.query,
+    provider: iter.provider,
+    status: iter.status,
+    resultsCount: iter.resultsCount,
+    error: iter.error,
+  }));
 
   const decision = await runAnalyst({
     taskId: task.id,
@@ -146,6 +165,7 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, provider:
     sources,
     iterationCount: task.iterationCount,
     maxSearches,
+    iterationHistory,
   });
 
   await processAnalystDecision(taskId, decision);
@@ -171,7 +191,7 @@ async function triggerAnalyst(taskId: string, maxSearches: number = 1, provider:
         });
 
         if (updatedTask && updatedTask.status === 'WAITING_ANALYST') {
-          await triggerAnalyst(taskId, maxSearches, provider);
+          await triggerAnalyst(taskId, maxSearches);
         }
       } catch (error) {
         console.error('Error in summarizer:', error);

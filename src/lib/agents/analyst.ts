@@ -1,7 +1,7 @@
 import { prisma } from '../prisma';
 import { generateCompletion, parseJsonResponse } from '../services/llm';
 import { emitEvent } from '../services/events';
-import { AnalystDecision, Citation, IntentSlots } from '../types';
+import { AnalystDecision, Citation, IntentSlots, NewsProvider } from '../types';
 
 // Max search iterations per request - configurable via environment variable
 const MAX_ITERATIONS = parseInt(process.env.MAX_SEARCHES || '1', 10);
@@ -31,12 +31,34 @@ Your decision framework:
 4. Does the information cover the TIME WINDOW requested?
 5. Can you provide MANY CITATIONS for key claims?
 
+## NEWS PROVIDERS
+
+You MUST choose a news provider for each search. Available providers:
+
+| Provider | Best For | Limitations | Query Tips |
+|----------|----------|-------------|------------|
+| newsdata | General news, default choice | 200 req/day | Simple keywords work best |
+| gnews | Breaking news, US focus | 100 req/day, 12h delay on free tier | Avoid special chars, simple queries |
+| newsapi | Rich metadata | LOCALHOST ONLY - fails in production | N/A - avoid unless testing locally |
+| guardian | UK/international news | UK-focused coverage | Good for politics, world news |
+| currents | Wide coverage | 600 req/day | Broad topic searches |
+| mediastack | Historical data | 500 req/month | Good for older stories |
+
+PROVIDER SELECTION RULES:
+- Start with "newsdata" as the default - it's most reliable
+- Use "gnews" for US-centric breaking news (but queries must be simple!)
+- Use "guardian" for UK/European topics
+- NEVER use "newsapi" - it only works on localhost
+- If a provider fails, SWITCH to a different one on retry
+- If a query has special characters or complex syntax, use "newsdata" (more forgiving)
+
 If information is INSUFFICIENT or could be MORE COMPREHENSIVE, generate a SEARCH query:
 - Be specific and targeted
 - Include relevant names, dates, locations
 - Vary queries across iterations to find new information
 - Consider different angles: who, what, when, where, why, reactions, analysis
 - Search for opposing viewpoints and different perspectives
+- Keep queries SIMPLE - avoid special characters like quotes, brackets, colons
 
 If information is TRULY COMPREHENSIVE (many sources, multiple angles), produce the FINAL ANSWER with this EXACT structure:
 
@@ -62,6 +84,7 @@ You MUST respond with a JSON object:
 {
   "decision": "SEARCH" | "COMPLETE" | "FAIL",
   "reason": "brief explanation of your decision",
+  "provider": "newsdata" | "gnews" | "guardian" | "currents" | "mediastack",
   "query": "search query (if SEARCH)",
   "response": "final answer with [1] [2] citations (if COMPLETE)",
   "citations": [
@@ -73,7 +96,16 @@ IMPORTANT:
 - You have up to ${MAX_ITERATIONS} search iterations - USE THEM for thorough research
 - Only COMPLETE when you have gathered comprehensive information from many sources
 - After ${MAX_ITERATIONS} iterations, you MUST return COMPLETE with what you have (or FAIL if truly insufficient)
-- FAIL response should explain what information is missing`;
+- FAIL response should explain what information is missing
+- ALWAYS include "provider" field when decision is "SEARCH"`;
+
+interface SearchIterationHistory {
+  query: string;
+  provider: string;
+  status: string;
+  resultsCount: number | null;
+  error: string | null;
+}
 
 interface AnalystInput {
   taskId: string;
@@ -84,18 +116,49 @@ interface AnalystInput {
   sources: Array<{ title: string; url: string; source: string }>;
   iterationCount: number;
   maxSearches?: number;
+  iterationHistory?: SearchIterationHistory[];
 }
 
 interface AnalystResponse {
   decision: 'SEARCH' | 'COMPLETE' | 'FAIL';
   reason: string;
+  provider?: NewsProvider;
   query?: string;
   response?: string;
   citations?: Array<{ number: number; title: string; url: string; source: string }>;
 }
 
+// Default provider when not specified or invalid
+const DEFAULT_PROVIDER: NewsProvider = 'newsdata';
+
+// Valid providers (excluding newsapi which only works on localhost)
+const VALID_PROVIDERS: NewsProvider[] = ['newsdata', 'gnews', 'guardian', 'currents', 'mediastack'];
+
+function isValidProvider(provider: string | undefined): provider is NewsProvider {
+  return VALID_PROVIDERS.includes(provider as NewsProvider);
+}
+
+/**
+ * Get an alternate provider when the current one fails.
+ * Prioritizes providers that haven't failed recently.
+ */
+function getAlternateProvider(failedProvider: NewsProvider, recentlyFailedProviders: NewsProvider[]): NewsProvider {
+  // Priority order: newsdata (most reliable), gnews, currents, guardian, mediastack
+  const priority: NewsProvider[] = ['newsdata', 'gnews', 'currents', 'guardian', 'mediastack'];
+
+  // Find first provider that hasn't failed
+  for (const provider of priority) {
+    if (provider !== failedProvider && !recentlyFailedProviders.includes(provider)) {
+      return provider;
+    }
+  }
+
+  // If all have failed, return newsdata as it's most forgiving
+  return failedProvider === 'newsdata' ? 'gnews' : 'newsdata';
+}
+
 export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> {
-  const { taskId, request, slots, notes, summary, sources, iterationCount, maxSearches } = input;
+  const { taskId, request, slots, notes, summary, sources, iterationCount, maxSearches, iterationHistory } = input;
 
   // Use maxSearches from input, or fall back to env var, or default to 1
   const maxIterations = maxSearches || MAX_ITERATIONS;
@@ -110,6 +173,7 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
   if (failedIterations.length > 0) {
     const failedIteration = failedIterations[0];
     const errorMsg = failedIteration.error || '';
+    const failedProvider = (failedIteration.provider as NewsProvider) || 'gnews';
 
     // For API restriction errors (NewsAPI localhost-only, etc.), fail immediately
     if (errorMsg.includes('NewsAPI') || errorMsg.includes('localhost only')) {
@@ -147,19 +211,33 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
       return failDecision;
     }
 
-    // Pass the error to the LLM so it can generate a better query
-    console.log(`[Analyst] Previous query failed: "${failedIteration.query}" - Error: ${errorMsg}`);
+    // Get a different provider to try
+    const alternateProvider = getAlternateProvider(failedProvider, recentFailures.map((f: { provider: string }) => f.provider as NewsProvider));
+
+    // Pass the error to the LLM so it can generate a better query and choose provider
+    console.log(`[Analyst] Previous query failed on ${failedProvider}: "${failedIteration.query}" - Error: ${errorMsg}`);
 
     await emitEvent(taskId, 'ANALYST', 'QUERY_ERROR_RETRY', {
       failedQuery: failedIteration.query,
+      failedProvider,
+      suggestedProvider: alternateProvider,
       error: errorMsg,
     });
 
-    // Add the error context to help the LLM fix the query
-    const errorContext = `\n\n## PREVIOUS QUERY FAILED\nQuery: "${failedIteration.query}"\nError: ${errorMsg}\n\nPlease generate a DIFFERENT, SIMPLER query that avoids the issue. Remove special characters, quotes, and complex syntax.`;
+    // Add the error context to help the LLM fix the query and choose provider
+    const errorContext = `\n\n## PREVIOUS QUERY FAILED
+Provider: ${failedProvider}
+Query: "${failedIteration.query}"
+Error: ${errorMsg}
+
+INSTRUCTIONS FOR RETRY:
+1. Choose a DIFFERENT provider (suggested: ${alternateProvider})
+2. Simplify the query - remove special characters, quotes, and complex syntax
+3. If the error mentions "syntax", the query format is wrong for that provider
+4. If the error mentions "rate limit", switch to a different provider`;
 
     // Build prompt with error context
-    const userPromptWithError = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, false) + errorContext;
+    const userPromptWithError = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, false, iterationHistory) + errorContext;
 
     try {
       const response = await generateCompletion({
@@ -172,20 +250,25 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
       const parsed = await parseJsonResponse<AnalystResponse>(response);
 
       if (parsed.decision === 'SEARCH' && parsed.query) {
+        // Use LLM's provider choice or fall back to alternate
+        const newProvider = isValidProvider(parsed.provider) ? parsed.provider : alternateProvider;
+
         // Make sure the new query is different from the failed one
-        if (parsed.query.toLowerCase() === failedIteration.query.toLowerCase()) {
-          // LLM gave same query - generate a simplified one
+        if (parsed.query.toLowerCase() === failedIteration.query.toLowerCase() && newProvider === failedProvider) {
+          // LLM gave same query and provider - force change
           const simplifiedQuery = buildSimplifiedQuery(request, slots);
 
           await emitEvent(taskId, 'ANALYST', 'ANALYST_DECISION', {
             decision: 'SEARCH',
             reason: 'Auto-simplified query after repeated failure',
             query: simplifiedQuery,
+            provider: alternateProvider,
           });
 
           return {
             type: 'SEARCH',
             query: simplifiedQuery,
+            provider: alternateProvider,
             reason: 'Auto-simplified query after repeated failure',
           };
         }
@@ -194,11 +277,13 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
           decision: 'SEARCH',
           reason: parsed.reason || 'Retrying with fixed query',
           query: parsed.query,
+          provider: newProvider,
         });
 
         return {
           type: 'SEARCH',
           query: parsed.query,
+          provider: newProvider,
           reason: parsed.reason || 'Retrying with fixed query',
         };
       }
@@ -227,7 +312,7 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
   }
 
   // Build prompt with current state
-  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, forceComplete);
+  const userPrompt = buildAnalystPrompt(request, slots, notes, summary, sources, iterationCount, maxIterations, forceComplete, iterationHistory);
 
   try {
     const response = await generateCompletion({
@@ -281,9 +366,13 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
           throw new Error('SEARCH decision requires a query');
         }
 
+        // Use LLM's provider choice or default to newsdata
+        const selectedProvider = isValidProvider(parsed.provider) ? parsed.provider : DEFAULT_PROVIDER;
+
         const searchDecision: AnalystDecision = {
           type: 'SEARCH',
           query: parsed.query,
+          provider: selectedProvider,
           reason: parsed.reason,
         };
 
@@ -291,10 +380,12 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
           decision: 'SEARCH',
           reason: parsed.reason,
           query: parsed.query,
+          provider: selectedProvider,
         });
 
         await emitEvent(taskId, 'ANALYST', 'SEARCH_QUERY_CREATED', {
           query: parsed.query,
+          provider: selectedProvider,
         });
 
         return searchDecision;
@@ -362,6 +453,7 @@ export async function runAnalyst(input: AnalystInput): Promise<AnalystDecision> 
       return {
         type: 'SEARCH',
         query: fallbackQuery,
+        provider: DEFAULT_PROVIDER,
         reason: 'Initial search based on request',
       };
     }
@@ -378,7 +470,8 @@ function buildAnalystPrompt(
   sources: Array<{ title: string; url: string; source: string }>,
   iterationCount: number,
   maxIterations: number,
-  forceComplete: boolean
+  forceComplete: boolean,
+  iterationHistory?: SearchIterationHistory[]
 ): string {
   let prompt = `## USER REQUEST\n${request}\n\n`;
 
@@ -392,6 +485,28 @@ function buildAnalystPrompt(
   prompt += `- Output Type: ${slots.outputType || 'summary'}\n\n`;
 
   prompt += `## CURRENT ITERATION: ${iterationCount + 1} of ${maxIterations}\n\n`;
+
+  // Include search history so analyst can learn from past searches
+  if (iterationHistory && iterationHistory.length > 0) {
+    prompt += `## SEARCH HISTORY\n`;
+    prompt += `Previous searches and their results:\n\n`;
+    iterationHistory.forEach((iter, idx) => {
+      prompt += `${idx + 1}. Provider: ${iter.provider} | Query: "${iter.query}"\n`;
+      prompt += `   Status: ${iter.status}`;
+      if (iter.status === 'DONE' && iter.resultsCount !== null) {
+        prompt += ` | Found ${iter.resultsCount} articles`;
+      }
+      if (iter.status === 'FAILED' && iter.error) {
+        prompt += ` | ERROR: ${iter.error}`;
+      }
+      prompt += '\n';
+    });
+    prompt += '\n';
+    prompt += `Use this history to:\n`;
+    prompt += `- Avoid repeating failed queries or providers\n`;
+    prompt += `- Try different providers if one fails\n`;
+    prompt += `- Adjust query syntax based on what worked\n\n`;
+  }
 
   if (notes) {
     prompt += `## NOTES FROM ARTICLES\n${notes}\n\n`;
@@ -489,11 +604,12 @@ export async function processAnalystDecision(
 ): Promise<void> {
   switch (decision.type) {
     case 'SEARCH': {
-      // Create a new search iteration
+      // Create a new search iteration with provider
       await prisma.searchIteration.create({
         data: {
           taskId,
           query: decision.query,
+          provider: decision.provider,
           status: 'PENDING',
         },
       });

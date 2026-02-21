@@ -3,7 +3,7 @@ import { searchNews } from '../services/news';
 import { extractArticle } from '../services/article-extractor';
 import { generateCompletion, parseJsonResponse } from '../services/llm';
 import { emitEvent } from '../services/events';
-import { ArticleMeta, ArticleNotes, IntentSlots } from '../types';
+import { ArticleMeta, ArticleNotes, IntentSlots, NewsProvider } from '../types';
 
 const NOTES_SYSTEM_PROMPT = `You are a news article analyst. Your job is to extract structured notes from news articles.
 
@@ -62,14 +62,14 @@ export async function runSummarizer(iterationId: string): Promise<void> {
   }
 
   const task = iteration.task;
-  type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
-  const context = (task.context as IntentSlots & { provider?: NewsProvider }) || {};
+  const context = (task.context as IntentSlots) || {};
   const slots: IntentSlots = {
     topic: context.topic,
     timeWindow: context.timeWindow,
     outputType: context.outputType,
   };
-  const provider: NewsProvider = context.provider || 'gnews';
+  // Use provider from iteration (chosen by analyst) with fallback to newsdata
+  const provider: NewsProvider = (iteration.provider as NewsProvider) || 'newsdata';
 
   try {
     // Update iteration status
@@ -81,6 +81,7 @@ export async function runSummarizer(iterationId: string): Promise<void> {
     // Emit search started event
     await emitEvent(task.id, 'SUMMARIZER', 'SEARCH_STARTED', {
       query: iteration.query,
+      provider,
     }, iterationId);
 
     // Search for articles - fetch many sources for comprehensive research
