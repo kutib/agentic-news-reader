@@ -4,6 +4,7 @@ import { searchGNews } from './gnews';
 import { searchNewsData } from './newsdata';
 import { searchCurrents } from './currents';
 import { searchMediastack } from './mediastack';
+import { searchGuardian } from './guardian';
 
 export type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
 
@@ -64,8 +65,16 @@ export async function searchNews(params: SearchParams): Promise<NewsSearchResult
     }
 
     case 'guardian': {
-      // TODO: Implement The Guardian API
-      throw new Error('The Guardian API is not yet implemented.');
+      if (!process.env.GUARDIAN_API_KEY) {
+        throw new Error('GUARDIAN_API_KEY is not configured. Get a free key at https://open-platform.theguardian.com/');
+      }
+      console.log('[News] Using The Guardian');
+      const result = await searchGuardian(params);
+      return {
+        articles: result.articles,
+        requestUrl: result.requestUrl,
+        provider: 'guardian',
+      };
     }
 
     case 'currents': {
