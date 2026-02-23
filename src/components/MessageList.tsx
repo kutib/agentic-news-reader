@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 
 interface Message {
   id: string;
@@ -98,11 +98,10 @@ function MessageBubble({ message }: { message: Message }) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-          isUser
+        className={`max-w-[80%] rounded-2xl px-4 py-3 ${isUser
             ? 'bg-blue-600 text-white'
             : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700'
-        }`}
+          }`}
       >
         <p className="whitespace-pre-wrap">{message.text}</p>
         <p className={`text-xs mt-1 ${isUser ? 'text-blue-200' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -114,7 +113,31 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 function FinalResponse({ task }: { task: Task }) {
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
   if (!task.response) return null;
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/notebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: task.id,
+          title: task.title || 'Saved Research',
+          content: task.response,
+          sources: task.sources,
+        }),
+      });
+      if (res.ok) setIsSaved(true);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Parse the structured response
   const sections = parseResponse(task.response);
@@ -130,6 +153,16 @@ function FinalResponse({ task }: { task: Task }) {
         {task.sources && (
           <span className="text-xs text-green-600 dark:text-green-400 ml-auto">{task.sources.length} sources</span>
         )}
+        <button
+          onClick={handleSave}
+          disabled={isSaving || isSaved}
+          className={`ml-2 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${isSaved
+              ? 'bg-green-200 text-green-800 cursor-not-allowed dark:bg-green-800 dark:text-green-200'
+              : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            }`}
+        >
+          {isSaving ? 'Saving...' : isSaved ? 'Saved' : 'Save to Notebook'}
+        </button>
       </div>
 
       <div className="p-4 space-y-4">

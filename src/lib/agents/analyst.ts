@@ -43,6 +43,7 @@ You MUST choose a news provider for each search. Available providers:
 | guardian | UK/international news | UK-focused coverage | Good for politics, world news |
 | currents | Wide coverage | 600 req/day | Broad topic searches |
 | mediastack | Historical data | 500 req/month | Good for older stories |
+| duckduckgo | Free fallback, no API key | Rate limited by scraping | Simple keyword queries |
 
 PROVIDER SELECTION RULES:
 - Start with "newsdata" as the default - it's most reliable
@@ -91,7 +92,7 @@ You MUST respond with a JSON object:
 {
   "decision": "SEARCH" | "COMPLETE" | "FAIL",
   "reason": "brief explanation of your decision",
-  "provider": "newsdata" | "gnews" | "guardian" | "currents" | "mediastack",
+  "provider": "newsdata" | "gnews" | "guardian" | "currents" | "mediastack" | "duckduckgo",
   "query": "search query (if SEARCH)",
   "response": "final answer with [1] [2] citations (if COMPLETE)"
 }
@@ -137,7 +138,7 @@ interface AnalystResponse {
 }
 
 // Valid providers (excluding newsapi which only works on localhost)
-const VALID_PROVIDERS: NewsProvider[] = ['newsdata', 'gnews', 'guardian', 'currents', 'mediastack'];
+const VALID_PROVIDERS: NewsProvider[] = ['newsdata', 'gnews', 'guardian', 'currents', 'mediastack', 'duckduckgo'];
 
 // Provider info for building prompts
 const PROVIDER_INFO: Record<NewsProvider, { name: string; description: string }> = {
@@ -147,6 +148,7 @@ const PROVIDER_INFO: Record<NewsProvider, { name: string; description: string }>
   currents: { name: 'Currents', description: '600/day, wide coverage' },
   mediastack: { name: 'Mediastack', description: '500/month, historical data' },
   newsapi: { name: 'NewsAPI', description: 'Localhost only' },
+  duckduckgo: { name: 'DuckDuckGo', description: 'Free, no API key, scraping-based' },
 };
 
 function isValidProviderForList(provider: string | undefined, enabledList: NewsProvider[]): provider is NewsProvider {
@@ -159,7 +161,7 @@ function isValidProviderForList(provider: string | undefined, enabledList: NewsP
  */
 function getAlternateProvider(failedProvider: NewsProvider, recentlyFailedProviders: NewsProvider[], enabledList: NewsProvider[]): NewsProvider {
   // Priority order: newsdata (most reliable), gnews, currents, guardian, mediastack
-  const priority: NewsProvider[] = ['newsdata', 'gnews', 'currents', 'guardian', 'mediastack'];
+  const priority: NewsProvider[] = ['newsdata', 'gnews', 'currents', 'guardian', 'mediastack', 'duckduckgo'];
 
   // Find first enabled provider that hasn't failed
   for (const provider of priority) {

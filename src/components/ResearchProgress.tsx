@@ -48,6 +48,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   gnews: 'GNews',
   guardian: 'The Guardian',
   mediastack: 'Mediastack',
+  duckduckgo: 'DuckDuckGo',
 };
 
 export function ResearchProgress({ task, events, debugMode = false }: ResearchProgressProps) {

@@ -51,6 +51,7 @@ model Task {
   iterations        SearchIteration[]
   events            AgentEvent[]
   messages          Message[]
+  savedResearch     SavedResearch?
 
   @@index([conversationId])
   @@index([status])
@@ -98,4 +99,14 @@ model AgentEvent {
   @@index([taskId])
   @@index([iterationId])
   @@index([createdAt])
+}
+
+model SavedResearch {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  title     String
+  content   String   @db.Text
+  sources   Json?
+  taskId    String?  @unique
+  task      Task?    @relation(fields: [taskId], references: [id])
 }

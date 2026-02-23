@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, KeyboardEvent, FormEvent } from 'react';
 
-type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack';
+type NewsProvider = 'gnews' | 'newsapi' | 'newsdata' | 'guardian' | 'currents' | 'mediastack' | 'duckduckgo';
 
 const ALL_PROVIDERS: { id: NewsProvider; name: string; description: string }[] = [
   { id: 'newsdata', name: 'NewsData.io', description: '200/day' },
@@ -10,6 +10,7 @@ const ALL_PROVIDERS: { id: NewsProvider; name: string; description: string }[] =
   { id: 'gnews', name: 'GNews', description: '100/day' },
   { id: 'guardian', name: 'The Guardian', description: 'Unlimited' },
   { id: 'mediastack', name: 'Mediastack', description: '500/month' },
+  { id: 'duckduckgo', name: 'DuckDuckGo', description: 'Free, no key' },
 ];
 
 interface ChatInputProps {
@@ -138,9 +139,8 @@ export function ChatInput({ onSend, isLoading, placeholder, showSettings, onShow
           <button
             type="button"
             onClick={() => onShowSettingsChange(!showSettings)}
-            className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-              showSettings ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-            }`}
+            className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${showSettings ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
             title="Search settings"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,11 +191,10 @@ export function ChatInput({ onSend, isLoading, placeholder, showSettings, onShow
               {ALL_PROVIDERS.map((provider) => (
                 <label
                   key={provider.id}
-                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-                    enabledProviders.includes(provider.id)
+                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${enabledProviders.includes(provider.id)
                       ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
                       : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 opacity-60'
-                  }`}
+                    }`}
                 >
                   <input
                     type="checkbox"
